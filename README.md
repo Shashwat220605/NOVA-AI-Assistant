@@ -1,5 +1,8 @@
 # NOVA - Personal AI Desktop Assistant
 
+## 🎥 Demo
+https://github.com/user-attachments/assets/2b686e1f-b5fe-4f7d-82c8-9e96ee2fb3f9
+
 > A lightweight desktop AI assistant combining voice interaction,
 > generative AI, speech recognition, text-to-speech, desktop automation,
 > real-time system telemetry, and a custom 3D interface.

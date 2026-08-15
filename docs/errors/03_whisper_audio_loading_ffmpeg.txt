@@ -1,0 +1,3 @@
+Whisper failed while loading voice.wav
+
+Whisper audio loading failed inside whisper.audio.load_audio while creating the mel spectrogram. The loader relies on FFmpeg to decode common audio files. Solution: install FFmpeg, ensure ffmpeg.exe is on PATH, and verify with ffmpeg -version. For packaged builds, FFmpeg must remain available to the executable environment or the audio-loading strategy must avoid an unavailable external binary. This was a runtime dependency problem, not a Whisper model problem.

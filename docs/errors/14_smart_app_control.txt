@@ -1,0 +1,3 @@
+Windows Smart App Control blocked NOVA.exe
+
+The locally built PyInstaller executable was unsigned/untrusted, so Windows could not confirm its publisher. During development, use the source/VS Code workflow or an appropriately trusted/signed build. Do not disable Windows security globally just to run a development executable. For a distributable portfolio release, code signing is the clean long-term solution.

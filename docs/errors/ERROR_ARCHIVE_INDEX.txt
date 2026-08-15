@@ -1,0 +1,2 @@
+NOVA ERROR ARCHIVE
+14 unique screenshot-backed error cases + 5 documented issues without dedicated screenshots. Duplicate root causes were consolidated.

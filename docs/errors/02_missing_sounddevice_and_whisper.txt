@@ -1,0 +1,3 @@
+Python modules missing from the active virtual environment
+
+Packages had been installed in a different Python environment, so the active venv could not import sounddevice or whisper. Solution: activate the venv first, then install dependencies through that interpreter, for example python -m pip install sounddevice scipy openai-whisper. Verify with python -c "import sounddevice, whisper; print("OK")". Lesson: always use python -m pip from the same interpreter that will run the application.

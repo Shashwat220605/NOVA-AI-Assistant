@@ -1,0 +1,3 @@
+PyAutoGUI could not import pyscreeze
+
+PyAutoGUI depends on pyscreeze, which depends on Pillow. The installed Pillow/Python combination was incompatible. Solution: install a compatible Pillow/PyAutoGUI combination or use a Python version supported by the dependency chain. Test the screenshot command separately before packaging. The voice pipeline itself was functioning; the screenshot command was the failing feature.

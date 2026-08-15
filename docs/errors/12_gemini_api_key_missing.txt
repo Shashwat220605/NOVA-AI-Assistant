@@ -1,0 +1,3 @@
+Packaged voice_ai.exe reported that no Gemini API key was provided
+
+The packaged executable was launched without the GEMINI_API_KEY environment/configuration available during development. Solution: provide the API key through a secure runtime configuration method that the packaged application can read. Never hard-code or commit an API key. The screenshot was kept out of the archive in its original form and replaced by a redacted copy elsewhere because credentials must not be redistributed.

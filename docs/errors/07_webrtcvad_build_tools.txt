@@ -1,0 +1,3 @@
+webrtcvad-wheels failed to build
+
+pip attempted to compile a native extension and Microsoft Visual C++ 14.0 or newer was missing. For NOVA, the lightweight design avoided making this native dependency mandatory because fixed-duration recording with sounddevice was sufficient. If VAD is required later, install the appropriate Microsoft C++ Build Tools and rebuild the wheel. Native Python packages can require a compiler even when pure-Python packages do not.

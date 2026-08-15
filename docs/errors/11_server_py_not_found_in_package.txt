@@ -1,0 +1,3 @@
+NOVA launcher could not find server.py after packaging
+
+The PyInstaller output did not contain the expected backend/server.py path. The launcher was checking a source-project filesystem path that was not present as a loose file in the bundled runtime. Solution: package the backend correctly and make the launcher import the bundled FastAPI app instead of requiring server.py to exist as a separate file. This was a packaging/path problem, not a FastAPI logic problem.

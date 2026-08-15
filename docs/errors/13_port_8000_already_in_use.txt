@@ -1,0 +1,3 @@
+Uvicorn failed with Windows error 10048
+
+Another process was already listening on 127.0.0.1:8000, so Uvicorn could not bind the same address and port. Solution: stop the existing server/process before starting another one, or choose another port consistently. NOVA’s final launcher should have one FastAPI instance owning port 8000.

@@ -1,0 +1,3 @@
+Gemini returned 503 UNAVAILABLE
+
+The Gemini service/model was temporarily unavailable because of high demand. The practical fix was to retry later and keep exception handling so NOVA could fail gracefully. A production implementation should catch transient 5xx errors, show a friendly fallback, and optionally retry with short exponential backoff. This was a service availability issue, not a microphone issue.

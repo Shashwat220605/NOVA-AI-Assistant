@@ -1,0 +1,3 @@
+sounddevice could not determine input channels
+
+The default input device was not resolving cleanly for the recording call. Windows exposed multiple microphones, virtual devices, Steam devices, and ASUS noise-cancelling devices. Solution: inspect sounddevice.query_devices(), identify a real microphone with input channels, and set the input device explicitly or set the default device. Avoid blindly using device 0 because Windows can expose many virtual endpoints.

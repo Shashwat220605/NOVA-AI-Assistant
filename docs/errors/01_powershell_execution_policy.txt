@@ -1,0 +1,3 @@
+PowerShell virtual-environment activation blocked
+
+PowerShell execution policy was preventing Activate.ps1 from running. The error was PSSecurityException/UnauthorizedAccess. Solution used: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser, then activate with .\venv\Scripts\Activate.ps1. RemoteSigned permits local scripts while applying signing rules to downloaded scripts. Verification: where.exe python and python --version should point to the project venv.

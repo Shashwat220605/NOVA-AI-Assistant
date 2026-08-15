@@ -1,0 +1,3 @@
+Python reported continue can be used only within a loop
+
+continue had been placed outside the loop because indentation/block structure was broken while editing voice_ai.py. Solution: move continue inside the main listening loop or restructure the exception path so execution naturally reaches the next iteration. Lesson: in a long voice-assistant file, indentation is control flow, so large blocks should be kept inside clearly marked functions and loops.

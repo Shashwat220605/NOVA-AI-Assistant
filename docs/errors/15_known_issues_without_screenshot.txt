@@ -1,0 +1,11 @@
+KNOWN NOVA ISSUES DOCUMENTED DURING DEVELOPMENT WITHOUT A DEDICATED ERROR SCREENSHOT
+
+1. FastAPI missing in packaged/runtime environment: the packaged launcher initially failed with "No module named fastapi". Fix: install FastAPI in the build environment and explicitly include it when packaging, then rebuild the executable.
+
+2. Access denied during packaging: Windows sometimes denied access to an existing executable/build directory. Fix: close running NOVA/voice_ai processes, remove stale build/dist output, then rebuild. Do not overwrite a running executable.
+
+3. Packaged Whisper missing mel_filters.npz: voice_ai.exe reported that Whisper assets were absent under its _internal directory. Fix: package Whisper data/assets with PyInstaller using the appropriate collect/add-data strategy, then verify the _internal/whisper/assets directory in the build.
+
+4. Webpage did not listen while the terminal version did: the browser UI and voice executable were initially using different process/startup paths. Fix: have FastAPI launch the packaged voice executable from the same NOVA launcher and expose a stable /listen endpoint.
+
+5. Telemetry appeared only when a manually started Uvicorn window existed: the React panel was correct, but the packaged launcher/backend was not exposing /system in that runtime. Fix: start FastAPI from launcher.py and rebuild the production frontend before PyInstaller packaging.

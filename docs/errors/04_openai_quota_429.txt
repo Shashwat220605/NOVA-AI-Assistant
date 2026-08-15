@@ -1,0 +1,3 @@
+OpenAI API returned 429 insufficient_quota
+
+The OpenAI API test reported insufficient_quota. The fix was to stop relying on that test path and use the configured Gemini API for NOVA’s final AI brain. If OpenAI is required in another project, the account/project needs usable quota and correct billing/API configuration. HTTP 429 here meant quota exhaustion rather than a syntax error.

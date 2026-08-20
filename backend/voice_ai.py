@@ -1,358 +1,149 @@
 import os
-import subprocess
+import re
 from datetime import datetime
 
 import numpy as np
-import sounddevice as sd
+import requests
 import scipy.io.wavfile as wav
+import sounddevice as sd
 import whisper
 import pyttsx3
-import requests
-
 from google import genai
+
+from desktop_automation import (
+    create_folder,
+    lock_computer,
+    open_application,
+    open_folder,
+    open_url,
+    power_action,
+    take_screenshot,
+    web_search,
+)
 
 
 # ============================================================
 # SETTINGS
 # ============================================================
-
 SAMPLE_RATE = 16000
-
-# NOVA waits this long for speech
 SILENCE_TIMEOUT = 5
-
 AUDIO_FILE = "voice.wav"
-
-# Your working microphone
 MICROPHONE_DEVICE = 1
-
-# Audio level considered speech
-# Lower = more sensitive
 SPEECH_THRESHOLD = 300
-
-# NOVA backend
 BACKEND_URL = "http://127.0.0.1:8000"
 
 
 # ============================================================
 # STATE
 # ============================================================
-
 def set_state(state):
-
     try:
-
-        requests.post(
-            f"{BACKEND_URL}/state/{state}",
-            timeout=2
-        )
-
+        requests.post(f"{BACKEND_URL}/state/{state}", timeout=2)
     except requests.RequestException:
-
         pass
 
 
 # ============================================================
-# LOCAL COMMANDS
+# DESKTOP COMMANDS
 # ============================================================
+def handle_desktop_command(text):
+    """Handle lightweight, explicitly supported Windows actions.
 
-def handle_local_command(text):
-
+    No arbitrary shell commands are accepted. Heavy background services,
+    OCR, browser drivers, and continuous screen monitoring are intentionally
+    avoided so NOVA remains friendly to mid-range laptop hardware.
+    """
     text = text.lower().strip()
 
-    # --------------------------------------------------------
-    # NAME
-    # --------------------------------------------------------
+    # Apps
+    app_patterns = {
+        "chrome": ["open chrome", "launch chrome", "start chrome", "open google chrome"],
+        "vs code": ["open vs code", "launch vs code", "open visual studio code", "open vscode"],
+        "discord": ["open discord", "launch discord", "start discord"],
+        "spotify": ["open spotify", "launch spotify", "start spotify"],
+        "calculator": ["open calculator", "open calc", "launch calculator"],
+        "notepad": ["open notepad", "launch notepad"],
+        "file explorer": ["open file explorer", "open explorer", "open my files"],
+        "settings": ["open settings", "open windows settings"],
+    }
+    for app, phrases in app_patterns.items():
+        if any(phrase in text for phrase in phrases):
+            return open_application(app)
 
-    if any(phrase in text for phrase in [
-        "what is your name",
-        "what's your name",
-        "who are you",
-        "your name"
+    # Folders
+    folder_patterns = {
+        "downloads": ["open downloads", "open my downloads", "show downloads"],
+        "documents": ["open documents", "open my documents"],
+        "desktop": ["open desktop", "show desktop folder"],
+        "pictures": ["open pictures", "open photos"],
+        "music": ["open music", "open my music"],
+        "videos": ["open videos", "open my videos"],
+    }
+    for folder, phrases in folder_patterns.items():
+        if any(phrase in text for phrase in phrases):
+            return open_folder(folder)
+
+    # Screenshot
+    if any(p in text for p in [
+        "take a screenshot", "take screenshot", "capture my screen", "screenshot"
     ]):
+        return take_screenshot()
 
-        return (
-            "My name is NOVA. "
-            "I am your personal AI assistant."
-        )
+    # Browser searches
+    youtube_match = re.search(r"(?:search|find) youtube for (.+)", text)
+    if youtube_match:
+        return web_search(youtube_match.group(1), site="youtube")
+
+    google_match = re.search(r"(?:search|google) for (.+)", text)
+    if google_match:
+        return web_search(google_match.group(1))
+
+    # URL opening
+    url_match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
+    if url_match:
+        return open_url(url_match.group(1))
+
+    # Create a safe folder inside Desktop/NOVA
+    folder_match = re.search(r"(?:create|make) (?:a )?folder(?: called| named)? (.+)", text)
+    if folder_match:
+        return create_folder(folder_match.group(1))
+
+    # Lock
+    if any(p in text for p in ["lock my computer", "lock the computer", "lock my pc"]):
+        return lock_computer()
+
+    # Power actions are confirmation-gated. We intentionally don't trigger
+    # shutdown/restart/sleep from a single ambiguous phrase.
+    if any(p in text for p in ["shutdown computer", "shut down computer"]):
+        return "Shutdown is available, but NOVA requires confirmation before doing that."
+    if any(p in text for p in ["restart computer", "restart my computer"]):
+        return "Restart is available, but NOVA requires confirmation before doing that."
+    if any(p in text for p in ["put computer to sleep", "sleep computer"]):
+        return "Sleep is available, but NOVA requires confirmation before doing that."
+
+    return None
 
 
-    # --------------------------------------------------------
-    # CAPABILITIES
-    # --------------------------------------------------------
+# ============================================================
+# GENERAL LOCAL COMMANDS
+# ============================================================
+def handle_local_command(text):
+    text = text.lower().strip()
 
-    if any(phrase in text for phrase in [
-        "what can you do",
-        "what are your capabilities",
-        "what do you do"
-    ]):
+    if any(p in text for p in ["what is your name", "what's your name", "who are you", "your name"]):
+        return "My name is NOVA. I am your personal AI assistant."
 
-        return (
-            "I can answer questions, open applications, "
-            "perform some computer tasks, and control "
-            "my visual interface."
-        )
+    if any(p in text for p in ["what can you do", "what are your capabilities", "what do you do"]):
+        return "I can answer questions, control supported computer tasks, open apps and folders, take screenshots, search the web, and control my visual interface."
 
-
-    # --------------------------------------------------------
-    # GREETINGS
-    # --------------------------------------------------------
-
-    if text in [
-        "hello",
-        "hi",
-        "hey",
-        "hello nova",
-        "hi nova",
-        "hey nova"
-    ]:
-
+    if text in {"hello", "hi", "hey", "hello nova", "hi nova", "hey nova"}:
         return "Hello. How can I help you?"
 
-
-    # --------------------------------------------------------
-    # STATUS
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "are you there",
-        "are you online",
-        "are you working"
-    ]):
-
+    if any(p in text for p in ["are you there", "are you online", "are you working"]):
         return "I'm online and ready."
 
-
-    # --------------------------------------------------------
-    # TIME
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "what time is it",
-        "tell me the time",
-        "current time"
-    ]):
-
-        current_time = datetime.now().strftime(
-            "%I:%M %p"
-        )
-
-        return f"The current time is {current_time}."
-
-
-    # --------------------------------------------------------
-    # OPEN VS CODE
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "open vs code",
-        "open visual studio code",
-        "launch vs code"
-    ]):
-
-        try:
-
-            subprocess.Popen(["code"])
-
-            return "Opening Visual Studio Code."
-
-        except Exception:
-
-            return "I couldn't open Visual Studio Code."
-
-
-    # --------------------------------------------------------
-    # OPEN CHROME
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "open chrome",
-        "launch chrome",
-        "start chrome"
-    ]):
-
-        chrome_paths = [
-
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-
-        ]
-
-        for path in chrome_paths:
-
-            if os.path.exists(path):
-
-                subprocess.Popen([path])
-
-                return "Opening Google Chrome."
-
-        return "I couldn't find Google Chrome."
-
-
-    # --------------------------------------------------------
-    # OPEN DISCORD
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "open discord",
-        "launch discord",
-        "start discord"
-    ]):
-
-        try:
-
-            discord_update = os.path.expandvars(
-                r"%LOCALAPPDATA%\Discord\Update.exe"
-            )
-
-            if os.path.exists(discord_update):
-
-                subprocess.Popen(
-                    [
-                        discord_update,
-                        "--processStart",
-                        "Discord.exe"
-                    ]
-                )
-
-                return "Opening Discord."
-
-
-            os.startfile("discord://")
-
-            return "Opening Discord."
-
-        except Exception as error:
-
-            print("Discord error:", error)
-
-            return "I couldn't open Discord."
-
-
-    # --------------------------------------------------------
-    # FILE EXPLORER
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "open file explorer",
-        "open explorer",
-        "open my files"
-    ]):
-
-        try:
-
-            subprocess.Popen(["explorer"])
-
-            return "Opening File Explorer."
-
-        except Exception:
-
-            return "I couldn't open File Explorer."
-
-
-    # --------------------------------------------------------
-    # DOWNLOADS
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "open downloads",
-        "open my downloads",
-        "show downloads"
-    ]):
-
-        try:
-
-            downloads = os.path.join(
-                os.path.expanduser("~"),
-                "Downloads"
-            )
-
-            subprocess.Popen(
-                ["explorer", downloads]
-            )
-
-            return "Opening your Downloads folder."
-
-        except Exception:
-
-            return "I couldn't open your Downloads folder."
-
-
-    # --------------------------------------------------------
-    # SCREENSHOT
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "take a screenshot",
-        "take screenshot",
-        "capture my screen",
-        "screenshot"
-    ]):
-
-        try:
-
-            import pyautogui
-
-            screenshots_folder = os.path.join(
-                os.path.expanduser("~"),
-                "Pictures",
-                "NOVA Screenshots"
-            )
-
-            os.makedirs(
-                screenshots_folder,
-                exist_ok=True
-            )
-
-            filename = datetime.now().strftime(
-                "nova_%Y%m%d_%H%M%S.png"
-            )
-
-            filepath = os.path.join(
-                screenshots_folder,
-                filename
-            )
-
-            screenshot = pyautogui.screenshot()
-
-            screenshot.save(filepath)
-
-            return "Screenshot saved successfully."
-
-        except Exception as error:
-
-            print(
-                "Screenshot error:",
-                error
-            )
-
-            return "I couldn't take the screenshot."
-
-
-    # --------------------------------------------------------
-    # LOCK COMPUTER
-    # --------------------------------------------------------
-
-    if any(phrase in text for phrase in [
-        "lock my computer",
-        "lock the computer",
-        "lock my pc"
-    ]):
-
-        subprocess.Popen(
-            [
-                "rundll32.exe",
-                "user32.dll,LockWorkStation"
-            ]
-        )
-
-        return "Locking your computer."
-
-
-    # --------------------------------------------------------
-    # NO LOCAL COMMAND
-    # --------------------------------------------------------
+    if any(p in text for p in ["what time is it", "tell me the time", "current time"]):
+        return f"The current time is {datetime.now().strftime('%I:%M %p')}."
 
     return None
 
@@ -360,91 +151,45 @@ def handle_local_command(text):
 # ============================================================
 # GEMINI
 # ============================================================
-
 print("Connecting to Gemini...")
-
 client = genai.Client()
-
 chat = client.chats.create(
-
     model="gemini-3.6-flash",
-
     config={
-
         "system_instruction": """
 You are NOVA, a personal AI voice assistant.
-
 Your name is NOVA.
-
-Gemini is the AI model powering you.
-You are not Gemini.
-
-If the user asks your name, say your name is NOVA.
-
-If the user asks who you are, say you are NOVA,
-their personal AI assistant.
-
-If the user asks what powers you,
-explain that you are powered by Google's Gemini AI model.
-
-Never introduce yourself as Gemini.
-
-Never claim to be human.
-
-Never invent information about your creator.
-
+Gemini is the AI model powering you. You are not Gemini.
+If asked your name, say NOVA.
+If asked who you are, say you are NOVA, their personal AI assistant.
+If asked what powers you, explain that Google Gemini powers your AI responses.
+Never introduce yourself as Gemini. Never claim to be human.
 Be helpful, natural, and concise.
-
 You are a desktop AI assistant.
 """
-    }
+    },
 )
 
 
 # ============================================================
-# TEXT TO SPEECH
+# VOICE SERVICES
 # ============================================================
-
 print("Initializing voice system...")
-
 tts = pyttsx3.init()
+tts.setProperty("rate", 175)
 
-tts.setProperty(
-    "rate",
-    175
-)
-
-
-# ============================================================
-# WHISPER
-# ============================================================
-
-print()
-print("Loading Whisper model...")
-print("This may take a little while on CPU.")
-print()
-
+print("\nLoading Whisper model...")
+print("This may take a little while on CPU.\n")
 model = whisper.load_model("base")
-
 print("Whisper loaded.")
 
-
-# ============================================================
-# START NOVA
-# ============================================================
-
-print()
-print("========================================")
+print("\n========================================")
 print("             NOVA ONLINE")
 print("========================================")
 print("Microphone device:", MICROPHONE_DEVICE)
-print()
-print("NOVA will shut down after")
-print("5 seconds without speech.")
+print("NOVA will shut down after 5 seconds without speech.")
 print("Say 'stop nova' to shut down manually.")
-print("========================================")
-print()
-
+print("========================================\n")
 
 set_state("idle")
 
@@ -452,321 +197,101 @@ set_state("idle")
 # ============================================================
 # MAIN LOOP
 # ============================================================
-
 while True:
-
-    # --------------------------------------------------------
-    # LISTENING
-    # --------------------------------------------------------
-
     set_state("listening")
-
-    print()
-    print("🎤 Listening...")
-    print("You have 5 seconds to speak.")
-
+    print("\n🎤 Listening...")
 
     try:
-
         audio = sd.rec(
-
-            int(
-                SILENCE_TIMEOUT *
-                SAMPLE_RATE
-            ),
-
+            int(SILENCE_TIMEOUT * SAMPLE_RATE),
             samplerate=SAMPLE_RATE,
-
             channels=1,
-
             dtype="int16",
-
-            device=MICROPHONE_DEVICE
+            device=MICROPHONE_DEVICE,
         )
-
         sd.wait()
-
-
     except sd.PortAudioError as error:
-
-        print()
-        print("🎤 Microphone temporarily unavailable.")
-        print("Error:", error)
-        print("Retrying...")
-        print()
-
+        print("🎤 Microphone temporarily unavailable:", error)
         set_state("idle")
-
         continue
-
-
     except Exception as error:
-
-        print()
-        print("❌ Microphone error:")
-        print(error)
-        print()
-
+        print("❌ Microphone error:", error)
         set_state("idle")
-
         continue
 
-
-    # --------------------------------------------------------
-    # CHECK WHETHER USER SPOKE
-    # --------------------------------------------------------
-
-    audio_float = audio.astype(
-        np.float32
-    )
-
-    rms = np.sqrt(
-        np.mean(
-            audio_float ** 2
-        )
-    )
-
-
-    print(
-        f"Audio level: {rms:.0f}"
-    )
-
-
-    # --------------------------------------------------------
-    # NO SPEECH
-    # --------------------------------------------------------
+    audio_float = audio.astype(np.float32)
+    rms = np.sqrt(np.mean(audio_float ** 2))
+    print(f"Audio level: {rms:.0f}")
 
     if rms < SPEECH_THRESHOLD:
-
-        print()
-        print("🔇 No speech detected for 5 seconds.")
-
         set_state("speaking")
-
         print("NOVA: Goodbye.")
-
         try:
-
-            tts.say(
-                "Goodbye."
-            )
-
+            tts.say("Goodbye.")
             tts.runAndWait()
-
         except Exception as error:
-
-            print(
-                "TTS error:",
-                error
-            )
-
+            print("TTS error:", error)
         set_state("idle")
-
-        print()
-        print("========================================")
-        print("              NOVA OFFLINE")
-        print("========================================")
-        print()
-
         break
 
-
-    # --------------------------------------------------------
-    # SAVE AUDIO
-    # --------------------------------------------------------
-
     try:
-
-        wav.write(
-            AUDIO_FILE,
-            SAMPLE_RATE,
-            audio
-        )
-
+        wav.write(AUDIO_FILE, SAMPLE_RATE, audio)
     except Exception as error:
-
-        print()
-        print("❌ Could not save audio:")
-        print(error)
-        print()
-
+        print("❌ Could not save audio:", error)
         set_state("idle")
-
         continue
 
-
-    # --------------------------------------------------------
-    # WHISPER
-    # --------------------------------------------------------
-
-    print()
-    print("🧠 Understanding...")
-
+    print("\n🧠 Understanding...")
     set_state("thinking")
 
-
     try:
-
-        result = model.transcribe(
-            AUDIO_FILE
-        )
-
+        result = model.transcribe(AUDIO_FILE)
         user_text = result["text"].strip()
-
-
     except Exception as error:
-
-        print()
-        print("❌ Whisper error:")
-        print(error)
-        print()
-
+        print("❌ Whisper error:", error)
         set_state("idle")
-
         continue
-
-
-    # --------------------------------------------------------
-    # EMPTY TRANSCRIPTION
-    # --------------------------------------------------------
 
     if not user_text:
-
-        print("I couldn't understand that.")
-
         set_state("idle")
-
         continue
 
-
-    # --------------------------------------------------------
-    # SHOW USER
-    # --------------------------------------------------------
-
-    print()
-    print("You:", user_text)
-    print()
-
-
-    # --------------------------------------------------------
-    # MANUAL STOP
-    # --------------------------------------------------------
+    print("\nYou:", user_text)
 
     if "stop nova" in user_text.lower():
-
-        print("NOVA: Shutting down.")
-
         set_state("speaking")
-
         try:
-
-            tts.say(
-                "Shutting down."
-            )
-
+            tts.say("Shutting down.")
             tts.runAndWait()
-
         except Exception as error:
-
             print("TTS error:", error)
-
         set_state("idle")
-
         break
 
+    # Local responses are checked first so simple commands don't consume
+    # Gemini requests or extra CPU/network resources.
+    ai_response = handle_local_command(user_text)
+    if ai_response is None:
+        ai_response = handle_desktop_command(user_text)
 
-    # --------------------------------------------------------
-    # LOCAL COMMAND
-    # --------------------------------------------------------
-
-    local_response = handle_local_command(
-        user_text
-    )
-
-
-    # ========================================================
-    # GENERATE RESPONSE
-    # ========================================================
-
-    if local_response is not None:
-
-        print(
-            "⚡ NOVA handled this locally."
-        )
-
-        ai_response = local_response
-
-
-    else:
-
+    if ai_response is None:
         print("🤖 NOVA is thinking...")
-
-        set_state("thinking")
-
-
         try:
-
-            response = chat.send_message(
-                user_text
-            )
-
+            response = chat.send_message(user_text)
             ai_response = response.text
-
-
         except Exception as error:
+            print("❌ Gemini error:", error)
+            ai_response = "Sorry, I couldn't connect to my AI brain."
 
-            print()
-            print("❌ Gemini error:")
-            print(error)
-            print()
-
-            ai_response = (
-                "Sorry, I couldn't connect "
-                "to my AI brain."
-            )
-
-
-    # ========================================================
-    # DISPLAY RESPONSE
-    # ========================================================
-
-    print()
-    print("NOVA:")
+    print("\nNOVA:")
     print(ai_response)
-    print()
-
-
-    # ========================================================
-    # SPEAK
-    # ========================================================
 
     set_state("speaking")
-
-    print("🔊 NOVA is speaking...")
-
-
     try:
-
-        tts.say(
-            ai_response
-        )
-
+        tts.say(ai_response)
         tts.runAndWait()
-
-
     except Exception as error:
-
-        print()
-        print("❌ TTS error:")
-        print(error)
-        print()
-
-
-    # ========================================================
-    # BACK TO LISTENING
-    # ========================================================
+        print("❌ TTS error:", error)
 
     set_state("idle")
-
-    print()
-    print("----------------------------------------")
+    print("\n----------------------------------------")

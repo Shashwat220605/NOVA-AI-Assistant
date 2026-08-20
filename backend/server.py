@@ -84,7 +84,7 @@ def stop_listening():
 @app.get("/system")
 def get_system_telemetry():
     memory = psutil.virtual_memory()
-    drive = os.environ.get("SystemDrive", "C:")
+    drive = os.environ.get("SystemDrive") or "C:"
     disk = psutil.disk_usage(drive + "\\")
     cpu_name = platform.processor() or "Unknown CPU"
     gpu_name = "NVIDIA GPU"
@@ -97,13 +97,7 @@ def get_system_telemetry():
     windows_version = platform.system()
     if windows_version == "Windows":
         windows_version = f"Windows {platform.release()}"
-    return {
-        "ram": {"total": round(memory.total / 1024**3, 1), "used": round(memory.used / 1024**3, 1), "available": round(memory.available / 1024**3, 1), "percent": memory.percent},
-        "storage": {"drive": drive, "total": round(disk.total / 1024**3, 1), "used": round(disk.used / 1024**3, 1), "free": round(disk.free / 1024**3, 1), "percent": disk.percent},
-        "cpu": {"name": cpu_name, "percent": psutil.cpu_percent(interval=None)},
-        "gpu": {"name": gpu_name},
-        "system": {"name": windows_version},
-    }
+    return {"ram": {"total": round(memory.total / 1024**3, 1), "used": round(memory.used / 1024**3, 1), "available": round(memory.available / 1024**3, 1), "percent": memory.percent}, "storage": {"drive": drive, "total": round(disk.total / 1024**3, 1), "used": round(disk.used / 1024**3, 1), "free": round(disk.free / 1024**3, 1), "percent": disk.percent}, "cpu": {"name": cpu_name, "percent": psutil.cpu_percent(interval=None)}, "gpu": {"name": gpu_name}, "system": {"name": windows_version}}
 
 @app.get("/health")
 def health():

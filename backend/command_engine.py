@@ -51,27 +51,40 @@ def detect_intent(text: str) -> Intent | None:
 
     if text in {"hello", "hi", "hey", "hello nova", "hi nova", "hey nova"}:
         return Intent("greeting")
-
     if "stop nova" in text:
         return Intent("stop")
-
     if any(p in text for p in ("what time is it", "tell me the time", "current time")):
         return Intent("time")
-
     if any(p in text for p in ("what is your name", "what's your name", "who are you")):
         return Intent("identity")
-
     if any(p in text for p in ("what can you do", "what are your capabilities", "what do you do")):
         return Intent("capabilities")
-
     if any(p in text for p in ("are you there", "are you online", "are you working")):
         return Intent("status")
 
     if any(p in text for p in ("take a screenshot", "take screenshot", "capture my screen", "screenshot")):
         return Intent("screenshot")
-
     if any(p in text for p in ("lock my computer", "lock the computer", "lock my pc")):
         return Intent("lock")
+
+    media = {
+        "next": ("next song", "next track", "skip song", "skip track"),
+        "previous": ("previous song", "previous track", "go back song"),
+        "play": ("play music", "resume music", "play media"),
+        "pause": ("pause music", "pause media"),
+    }
+    for action, phrases in media.items():
+        if any(p in text for p in phrases):
+            return Intent("media", action)
+
+    volume = {
+        "up": ("volume up", "increase volume", "turn volume up", "louder"),
+        "down": ("volume down", "decrease volume", "turn volume down", "quieter"),
+        "mute": ("mute volume", "mute computer", "unmute volume", "unmute computer"),
+    }
+    for action, phrases in volume.items():
+        if any(p in text for p in phrases):
+            return Intent("volume", action)
 
     for action, phrases in {
         "shutdown": ("shutdown computer", "shut down computer", "shutdown my computer", "shut down my computer"),
@@ -81,13 +94,14 @@ def detect_intent(text: str) -> Intent | None:
         if any(p in text for p in phrases):
             return Intent("power", action, requires_confirmation=True)
 
-    match = re.search(r"(?:search|google) (?:for )?(.+)", text)
-    if match:
-        return Intent("web_search", match.group(1).strip())
-
+    # Check the specific YouTube form before generic web search.
     match = re.search(r"(?:search|find) youtube (?:for )?(.+)", text)
     if match:
         return Intent("youtube_search", match.group(1).strip())
+
+    match = re.search(r"(?:search|google) (?:for )?(.+)", text)
+    if match:
+        return Intent("web_search", match.group(1).strip())
 
     match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
     if match:

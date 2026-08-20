@@ -50,6 +50,7 @@ def detect_intent(text: str) -> Intent | None:
     }
     for action, phrases in media.items():
         if any(p in text for p in phrases): return Intent("media", action)
+
     volume = {
         "up": ("volume up", "increase volume", "turn volume up", "louder"),
         "down": ("volume down", "decrease volume", "turn volume down", "quieter"),
@@ -65,14 +66,16 @@ def detect_intent(text: str) -> Intent | None:
     }.items():
         if any(p in text for p in phrases): return Intent("power", action, requires_confirmation=True)
 
-    match = re.search(r"(?:search|google) (?:for )?(.+)", text)
-    if match: return Intent("web_search", match.group(1).strip())
+    # Specific browser searches must win before generic Google searches.
     match = re.search(r"(?:search|find) youtube (?:for )?(.+)", text)
     if match: return Intent("youtube_search", match.group(1).strip())
+    match = re.search(r"(?:search|google) (?:for )?(.+)", text)
+    if match: return Intent("web_search", match.group(1).strip())
     match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
     if match: return Intent("open_url", match.group(1))
     match = re.search(r"(?:create|make) (?:a )?folder(?: called| named)? (.+)", text)
-    if match: return Intent("create_folder", match.group(1).strip())
+    if match: return Intent("create_folder", match.group(1).strip(), requires_confirmation=True)
+
     for site in SITE_ALIASES:
         if any(p in text for p in (f"open {site}", f"go to {site}", f"visit {site}")): return Intent("open_site", site)
     app = _find_alias(text, APP_ALIASES)

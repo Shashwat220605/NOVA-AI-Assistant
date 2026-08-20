@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 
 import numpy as np
@@ -122,7 +121,6 @@ Be helpful, natural, and concise. You are a desktop AI assistant.
 """},
 )
 
-print("Initializing voice system...")
 tts = pyttsx3.init()
 tts.setProperty("rate", 175)
 print("\nLoading Whisper model...")
@@ -212,13 +210,14 @@ while True:
 
     print("\nNOVA:")
     print(ai_response)
-    set_state("speaking")
+    protected = bool(intent and intent.requires_confirmation)
+    if not protected:
+        set_state("speaking")
     try:
         tts.say(ai_response)
         tts.runAndWait()
     except Exception as error:
         print("❌ TTS error:", error)
-    if detect_intent(user_text) and detect_intent(user_text).requires_confirmation:
-        pass
-    set_state("idle")
+    if not protected:
+        set_state("idle")
     print("\n----------------------------------------")

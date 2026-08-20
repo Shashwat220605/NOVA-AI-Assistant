@@ -18,15 +18,11 @@ from desktop_automation import (
     open_application,
     open_folder,
     open_url,
-    power_action,
     take_screenshot,
     web_search,
 )
 
 
-# ============================================================
-# SETTINGS
-# ============================================================
 SAMPLE_RATE = 16000
 SILENCE_TIMEOUT = 5
 AUDIO_FILE = "voice.wav"
@@ -43,9 +39,7 @@ def set_state(state):
 
 
 def handle_local_command(text):
-    """Return a response for commands that need no AI/network request."""
     intent = detect_intent(text)
-
     if intent is None:
         return None
 
@@ -53,9 +47,9 @@ def handle_local_command(text):
         "greeting": "Hello. How can I help you?",
         "identity": "My name is NOVA. I am your personal AI assistant.",
         "capabilities": (
-            "I can answer questions, control supported computer tasks, "
-            "open apps and folders, take screenshots, control media and "
-            "volume, search the web, and control my visual interface."
+            "I can answer questions, control supported computer tasks, open apps "
+            "and folders, take screenshots, control media and volume, search the "
+            "web, and control my visual interface."
         ),
         "status": "I'm online and ready.",
         "time": f"The current time is {datetime.now().strftime('%I:%M %p')}.",
@@ -64,12 +58,14 @@ def handle_local_command(text):
 
 
 def execute_intent(intent: Intent) -> str | None:
-    """Execute only intents backed by explicit, safe automation functions."""
+    """Execute only explicit, lightweight automation actions."""
     actions = {
         "open_app": lambda: open_application(intent.argument),
         "open_folder": lambda: open_folder(intent.argument),
         "screenshot": take_screenshot,
         "lock": lock_computer,
+        "media": lambda: control_media(intent.argument),
+        "volume": lambda: control_volume(intent.argument),
         "open_url": lambda: open_url(intent.argument),
         "web_search": lambda: web_search(intent.argument),
         "youtube_search": lambda: web_search(intent.argument, site="youtube"),
@@ -77,8 +73,6 @@ def execute_intent(intent: Intent) -> str | None:
     }
 
     if intent.name == "power":
-        # Confirmation UI/flow can be added later. Never execute a destructive
-        # action merely because a single voice sentence matched it.
         return (
             f"{intent.argument.title()} is available, but NOVA requires "
             "confirmation before doing that."
@@ -89,24 +83,15 @@ def execute_intent(intent: Intent) -> str | None:
 
 
 def handle_desktop_command(text):
-    """Route voice input through the deterministic intent engine.
-
-    This layer has zero idle CPU cost and does not invoke another AI model.
-    Unknown requests are returned to Gemini for normal conversation.
-    """
+    """Route commands without a local AI model or background processing."""
     intent = detect_intent(text)
     if intent is None:
         return None
-
     if intent.name in {"stop", "greeting", "identity", "capabilities", "status", "time"}:
         return None
-
     return execute_intent(intent)
 
 
-# ============================================================
-# GEMINI
-# ============================================================
 print("Connecting to Gemini...")
 client = genai.Client()
 chat = client.chats.create(
@@ -127,9 +112,6 @@ You are a desktop AI assistant.
 )
 
 
-# ============================================================
-# VOICE SERVICES
-# ============================================================
 print("Initializing voice system...")
 tts = pyttsx3.init()
 tts.setProperty("rate", 175)
@@ -149,10 +131,6 @@ print("========================================\n")
 
 set_state("idle")
 
-
-# ============================================================
-# MAIN LOOP
-# ============================================================
 while True:
     set_state("listening")
     print("\n🎤 Listening...")
@@ -213,7 +191,6 @@ while True:
         continue
 
     print("\nYou:", user_text)
-
     intent = detect_intent(user_text)
 
     if intent and intent.name == "stop":
@@ -226,10 +203,9 @@ while True:
         set_state("idle")
         break
 
-    # Deterministic local handling happens first. Simple commands never
-    # consume a Gemini request and therefore remain fast and lightweight.
+    # Local commands are resolved before Gemini. This keeps simple actions
+    # fast and avoids unnecessary network/model work on a mid-range laptop.
     ai_response = handle_local_command(user_text)
-
     if ai_response is None:
         ai_response = handle_desktop_command(user_text)
 

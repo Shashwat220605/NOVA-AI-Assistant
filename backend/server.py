@@ -3,7 +3,6 @@ import sys
 import subprocess
 import platform
 import psutil
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -11,7 +10,6 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="NOVA AI", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIST = os.path.join(ROOT_DIR, "frontend", "dist")

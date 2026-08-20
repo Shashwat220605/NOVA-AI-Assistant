@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime
 
 import numpy as np
@@ -10,6 +9,7 @@ import whisper
 import pyttsx3
 from google import genai
 
+from command_engine import Intent, detect_intent
 from desktop_automation import (
     control_media,
     control_volume,
@@ -18,6 +18,7 @@ from desktop_automation import (
     open_application,
     open_folder,
     open_url,
+    power_action,
     take_screenshot,
     web_search,
 )
@@ -41,110 +42,71 @@ def set_state(state):
         pass
 
 
-def handle_desktop_command(text):
-    """Handle explicitly supported Windows actions.
-
-    Commands run only after voice input. No arbitrary shell commands,
-    continuous screen monitoring, OCR, browser drivers, or background
-    automation services are used, keeping NOVA lightweight on mid-range PCs.
-    """
-    text = text.lower().strip()
-
-    app_patterns = {
-        "chrome": ["open chrome", "launch chrome", "start chrome", "open google chrome"],
-        "vs code": ["open vs code", "launch vs code", "open visual studio code", "open vscode"],
-        "discord": ["open discord", "launch discord", "start discord"],
-        "spotify": ["open spotify", "launch spotify", "start spotify"],
-        "calculator": ["open calculator", "open calc", "launch calculator"],
-        "notepad": ["open notepad", "launch notepad"],
-        "file explorer": ["open file explorer", "open explorer", "open my files"],
-        "settings": ["open settings", "open windows settings"],
-    }
-    for app, phrases in app_patterns.items():
-        if any(phrase in text for phrase in phrases):
-            return open_application(app)
-
-    folder_patterns = {
-        "downloads": ["open downloads", "open my downloads", "show downloads"],
-        "documents": ["open documents", "open my documents"],
-        "desktop": ["open desktop", "show desktop folder"],
-        "pictures": ["open pictures", "open photos"],
-        "music": ["open music", "open my music"],
-        "videos": ["open videos", "open my videos"],
-    }
-    for folder, phrases in folder_patterns.items():
-        if any(phrase in text for phrase in phrases):
-            return open_folder(folder)
-
-    if any(p in text for p in ["take a screenshot", "take screenshot", "capture my screen", "screenshot"]):
-        return take_screenshot()
-
-    # Media and volume are on-demand only, so they have negligible idle cost.
-    if any(p in text for p in ["play music", "resume music", "play media", "pause music", "pause media", "play pause"]):
-        action = "pause" if "pause" in text and "play" not in text else "play"
-        return control_media(action)
-    if any(p in text for p in ["next song", "next track", "skip song", "skip track"]):
-        return control_media("next")
-    if any(p in text for p in ["previous song", "previous track", "go back song"]):
-        return control_media("previous")
-    if any(p in text for p in ["volume up", "increase volume", "turn volume up", "louder"]):
-        return control_volume("up")
-    if any(p in text for p in ["volume down", "decrease volume", "turn volume down", "quieter"]):
-        return control_volume("down")
-    if any(p in text for p in ["mute volume", "mute computer", "unmute volume", "unmute computer"]):
-        return control_volume("mute")
-
-    youtube_match = re.search(r"(?:search|find) youtube for (.+)", text)
-    if youtube_match:
-        return web_search(youtube_match.group(1), site="youtube")
-
-    google_match = re.search(r"(?:search|google) for (.+)", text)
-    if google_match:
-        return web_search(google_match.group(1))
-
-    url_match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
-    if url_match:
-        return open_url(url_match.group(1))
-
-    folder_match = re.search(r"(?:create|make) (?:a )?folder(?: called| named)? (.+)", text)
-    if folder_match:
-        return create_folder(folder_match.group(1))
-
-    if any(p in text for p in ["lock my computer", "lock the computer", "lock my pc"]):
-        return lock_computer()
-
-    # Destructive power actions are intentionally not executed from voice alone.
-    if any(p in text for p in ["shutdown computer", "shut down computer"]):
-        return "Shutdown is available, but NOVA requires confirmation before doing that."
-    if any(p in text for p in ["restart computer", "restart my computer"]):
-        return "Restart is available, but NOVA requires confirmation before doing that."
-    if any(p in text for p in ["put computer to sleep", "sleep computer"]):
-        return "Sleep is available, but NOVA requires confirmation before doing that."
-
-    return None
-
-
 def handle_local_command(text):
-    text = text.lower().strip()
+    """Return a response for commands that need no AI/network request."""
+    intent = detect_intent(text)
 
-    if any(p in text for p in ["what is your name", "what's your name", "who are you", "your name"]):
-        return "My name is NOVA. I am your personal AI assistant."
+    if intent is None:
+        return None
 
-    if any(p in text for p in ["what can you do", "what are your capabilities", "what do you do"]):
-        return "I can answer questions, control supported computer tasks, open apps and folders, take screenshots, control media and volume, search the web, and control my visual interface."
+    responses = {
+        "greeting": "Hello. How can I help you?",
+        "identity": "My name is NOVA. I am your personal AI assistant.",
+        "capabilities": (
+            "I can answer questions, control supported computer tasks, "
+            "open apps and folders, take screenshots, control media and "
+            "volume, search the web, and control my visual interface."
+        ),
+        "status": "I'm online and ready.",
+        "time": f"The current time is {datetime.now().strftime('%I:%M %p')}.",
+    }
+    return responses.get(intent.name)
 
-    if text in {"hello", "hi", "hey", "hello nova", "hi nova", "hey nova"}:
-        return "Hello. How can I help you?"
 
-    if any(p in text for p in ["are you there", "are you online", "are you working"]):
-        return "I'm online and ready."
+def execute_intent(intent: Intent) -> str | None:
+    """Execute only intents backed by explicit, safe automation functions."""
+    actions = {
+        "open_app": lambda: open_application(intent.argument),
+        "open_folder": lambda: open_folder(intent.argument),
+        "screenshot": take_screenshot,
+        "lock": lock_computer,
+        "open_url": lambda: open_url(intent.argument),
+        "web_search": lambda: web_search(intent.argument),
+        "youtube_search": lambda: web_search(intent.argument, site="youtube"),
+        "create_folder": lambda: create_folder(intent.argument),
+    }
 
-    if any(p in text for p in ["what time is it", "tell me the time", "current time"]):
-        return f"The current time is {datetime.now().strftime('%I:%M %p')}."
+    if intent.name == "power":
+        # Confirmation UI/flow can be added later. Never execute a destructive
+        # action merely because a single voice sentence matched it.
+        return (
+            f"{intent.argument.title()} is available, but NOVA requires "
+            "confirmation before doing that."
+        )
 
-    return None
+    action = actions.get(intent.name)
+    return action() if action else None
 
 
+def handle_desktop_command(text):
+    """Route voice input through the deterministic intent engine.
+
+    This layer has zero idle CPU cost and does not invoke another AI model.
+    Unknown requests are returned to Gemini for normal conversation.
+    """
+    intent = detect_intent(text)
+    if intent is None:
+        return None
+
+    if intent.name in {"stop", "greeting", "identity", "capabilities", "status", "time"}:
+        return None
+
+    return execute_intent(intent)
+
+
+# ============================================================
+# GEMINI
+# ============================================================
 print("Connecting to Gemini...")
 client = genai.Client()
 chat = client.chats.create(
@@ -164,6 +126,10 @@ You are a desktop AI assistant.
     },
 )
 
+
+# ============================================================
+# VOICE SERVICES
+# ============================================================
 print("Initializing voice system...")
 tts = pyttsx3.init()
 tts.setProperty("rate", 175)
@@ -183,6 +149,10 @@ print("========================================\n")
 
 set_state("idle")
 
+
+# ============================================================
+# MAIN LOOP
+# ============================================================
 while True:
     set_state("listening")
     print("\n🎤 Listening...")
@@ -244,7 +214,9 @@ while True:
 
     print("\nYou:", user_text)
 
-    if "stop nova" in user_text.lower():
+    intent = detect_intent(user_text)
+
+    if intent and intent.name == "stop":
         set_state("speaking")
         try:
             tts.say("Shutting down.")
@@ -254,9 +226,10 @@ while True:
         set_state("idle")
         break
 
-    # Local/desktop actions run before Gemini. This avoids network requests
-    # and extra model work for simple computer commands.
+    # Deterministic local handling happens first. Simple commands never
+    # consume a Gemini request and therefore remain fast and lightweight.
     ai_response = handle_local_command(user_text)
+
     if ai_response is None:
         ai_response = handle_desktop_command(user_text)
 

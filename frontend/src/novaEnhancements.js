@@ -1,7 +1,5 @@
 const API = "http://127.0.0.1:8000";
-
 let pressing = false;
-let pollTimer = null;
 
 async function post(path) {
   try {
@@ -30,28 +28,22 @@ async function pressToTalkStop() {
 function installPushToTalk() {
   const button = document.querySelector(".listen-button");
   if (!button || button.dataset.pttReady === "true") return;
-
   button.dataset.pttReady = "true";
-  button.title = "Hold to talk. Release to stop. Space also works while focused on the page.";
+  button.title = "Hold to talk. Release to stop. Space also works while the page is focused.";
 
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     pressToTalkStart();
   });
-
   button.addEventListener("pointerup", (event) => {
     event.preventDefault();
     pressToTalkStop();
   });
-
   button.addEventListener("pointercancel", pressToTalkStop);
   button.addEventListener("pointerleave", (event) => {
     if (event.buttons) pressToTalkStop();
   });
-
   button.addEventListener("click", (event) => {
-    // The React click handler starts the old toggle-style listener.
-    // PTT owns the button interaction now, so suppress that click.
     event.preventDefault();
     event.stopPropagation();
   }, true);
@@ -65,7 +57,6 @@ function installKeyboardPushToTalk() {
     event.preventDefault();
     pressToTalkStart();
   });
-
   window.addEventListener("keyup", (event) => {
     if (event.code !== "Space") return;
     const tag = document.activeElement?.tagName;
@@ -73,6 +64,8 @@ function installKeyboardPushToTalk() {
     event.preventDefault();
     pressToTalkStop();
   });
+  window.addEventListener("pointerup", pressToTalkStop);
+  window.addEventListener("blur", pressToTalkStop);
 }
 
 async function refreshReactiveState() {
@@ -86,16 +79,11 @@ async function refreshReactiveState() {
   }
 }
 
-function installReactiveCore() {
-  refreshReactiveState();
-  pollTimer = window.setInterval(refreshReactiveState, 600);
-}
-
 function boot() {
   installPushToTalk();
   installKeyboardPushToTalk();
-  installReactiveCore();
-
+  refreshReactiveState();
+  window.setInterval(refreshReactiveState, 600);
   const observer = new MutationObserver(installPushToTalk);
   observer.observe(document.body, { childList: true, subtree: true });
 }

@@ -19,6 +19,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIST = os.path.join(ROOT_DIR, "frontend", "dist")
 VOICE_EXE = os.path.join(ROOT_DIR, "dist", "voice_ai", "voice_ai.exe")
+VOICE_SCRIPT = os.path.join(BASE_DIR, "voice_ai.py")
 nova_state = {"state": "idle", "message": "Ready.", "confirmation": None}
 voice_process = None
 assets_directory = os.path.join(FRONTEND_DIST, "assets")
@@ -88,18 +89,31 @@ def cancel_action():
 
 @app.post("/listen")
 def start_listening():
+    """Start the packaged voice executable, or the Python voice engine in development."""
     global voice_process
     if voice_process is not None and voice_process.poll() is None:
         return {"success": False, "message": "NOVA is already listening."}
-    if not os.path.exists(VOICE_EXE):
-        return {"success": False, "message": "voice_ai.exe was not found."}
+
     try:
-        voice_process = subprocess.Popen([VOICE_EXE], cwd=os.path.dirname(VOICE_EXE), creationflags=subprocess.CREATE_NEW_CONSOLE)
+        if getattr(sys, "frozen", False) and os.path.exists(VOICE_EXE):
+            command = [VOICE_EXE]
+            cwd = os.path.dirname(VOICE_EXE)
+        elif os.path.exists(VOICE_SCRIPT):
+            command = [sys.executable, VOICE_SCRIPT]
+            cwd = BASE_DIR
+        else:
+            return {"success": False, "message": "NOVA voice engine was not found."}
+
+        creationflags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
+        voice_process = subprocess.Popen(command, cwd=cwd, creationflags=creationflags)
         nova_state["state"] = "listening"
         nova_state["message"] = "Listening for your voice."
         return {"success": True, "message": "NOVA voice system started."}
     except Exception as error:
-        return {"success": False, "message": str(error)}
+        voice_process = None
+        nova_state["state"] = "error"
+        nova_state["message"] = f"Voice system could not start: {error}"
+        return {"success": False, "message": nova_state["message"]}
 
 @app.post("/stop")
 def stop_listening():
@@ -197,4 +211,12 @@ def health():
 
 @app.get("/debug")
 def debug():
-    return {"root_dir": ROOT_DIR, "frontend": FRONTEND_DIST, "voice_exe": VOICE_EXE, "voice_exists": os.path.exists(VOICE_EXE), "frontend_exists": os.path.exists(os.path.join(FRONTEND_DIST, "index.html"))}
+    return {
+        "root_dir": ROOT_DIR,
+        "frontend": FRONTEND_DIST,
+        "voice_exe": VOICE_EXE,
+        "voice_script": VOICE_SCRIPT,
+        "voice_exe_exists": os.path.exists(VOICE_EXE),
+        "voice_script_exists": os.path.exists(VOICE_SCRIPT),
+        "frontend_exists": os.path.exists(os.path.join(FRONTEND_DIST, "index.html")),
+    }

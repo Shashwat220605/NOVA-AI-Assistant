@@ -27,7 +27,7 @@ function installPushToTalk() {
   const button = document.querySelector(".listen-button");
   if (!button || button.dataset.pttReady === "true") return;
   button.dataset.pttReady = "true";
-  button.title = "Press to talk. NOVA listens in a short bounded window and then processes your command.";
+  button.title = "Press to talk. NOVA listens until you stop speaking.";
   button.addEventListener("pointerdown", (event) => { event.preventDefault(); pressToTalkStart(); });
   button.addEventListener("pointerup", (event) => { event.preventDefault(); pressToTalkRelease(); });
   button.addEventListener("pointercancel", pressToTalkRelease);
@@ -60,7 +60,6 @@ function renderConfirmation(data) {
     overlay?.remove();
     return;
   }
-
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.className = "nova-confirmation";
@@ -77,16 +76,51 @@ function renderConfirmation(data) {
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector(".nova-confirm-yes").addEventListener("click", async () => {
-      await post("/confirm");
-      await refreshReactiveState();
-    });
-    overlay.querySelector(".nova-confirm-no").addEventListener("click", async () => {
-      await post("/cancel");
-      await refreshReactiveState();
-    });
+    overlay.querySelector(".nova-confirm-yes").addEventListener("click", async () => { await post("/confirm"); await refreshReactiveState(); });
+    overlay.querySelector(".nova-confirm-no").addEventListener("click", async () => { await post("/cancel"); await refreshReactiveState(); });
   }
   overlay.querySelector(".nova-confirmation-label").textContent = confirmation.label || "Protected desktop action";
+}
+
+function renderPerformanceHud(data) {
+  let hud = document.querySelector(".nova-performance-hud");
+  if (!hud) {
+    hud = document.createElement("div");
+    hud.className = "nova-performance-hud";
+    hud.innerHTML = `
+      <div class="nova-perf-title"><span>NOVA // SYSTEM</span><span class="nova-perf-live">● LIVE</span></div>
+      <div class="nova-perf-grid">
+        <div><span>CPU</span><strong data-perf="cpu">--</strong></div>
+        <div><span>RAM</span><strong data-perf="ram">--</strong></div>
+        <div><span>GPU</span><strong data-perf="gpu">--</strong></div>
+        <div><span>VRAM</span><strong data-perf="vram">--</strong></div>
+        <div><span>NET ↓</span><strong data-perf="down">--</strong></div>
+        <div><span>NET ↑</span><strong data-perf="up">--</strong></div>
+      </div>`;
+    document.body.appendChild(hud);
+  }
+  const cpu = data.cpu?.percent;
+  const ram = data.ram?.percent;
+  const gpu = data.gpu?.percent;
+  const vram = data.gpu?.vram_used_mb != null && data.gpu?.vram_total_mb != null
+    ? `${Math.round(data.gpu.vram_used_mb)} / ${Math.round(data.gpu.vram_total_mb)} MB`
+    : "N/A";
+  hud.querySelector('[data-perf="cpu"]').textContent = cpu == null ? "--" : `${Math.round(cpu)}%`;
+  hud.querySelector('[data-perf="ram"]').textContent = ram == null ? "--" : `${Math.round(ram)}%`;
+  hud.querySelector('[data-perf="gpu"]').textContent = gpu == null ? "N/A" : `${Math.round(gpu)}%`;
+  hud.querySelector('[data-perf="vram"]').textContent = vram;
+  hud.querySelector('[data-perf="down"]').textContent = `${data.network?.download_kbps ?? 0} KB/s`;
+  hud.querySelector('[data-perf="up"]').textContent = `${data.network?.upload_kbps ?? 0} KB/s`;
+}
+
+async function refreshPerformanceHud() {
+  try {
+    const response = await fetch(`${API}/system`);
+    if (!response.ok) return;
+    renderPerformanceHud(await response.json());
+  } catch {
+    // Telemetry is optional; the main application remains usable without it.
+  }
 }
 
 async function refreshReactiveState() {
@@ -105,7 +139,9 @@ function boot() {
   installPushToTalk();
   installKeyboardPushToTalk();
   refreshReactiveState();
-  window.setInterval(refreshReactiveState, 600);
+  refreshPerformanceHud();
+  window.setInterval(refreshReactiveState, 700);
+  window.setInterval(refreshPerformanceHud, 3000);
   const observer = new MutationObserver(installPushToTalk);
   observer.observe(document.body, { childList: true, subtree: true });
 }

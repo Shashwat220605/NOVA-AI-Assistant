@@ -10,10 +10,11 @@ import pyttsx3
 from google import genai
 
 from command_engine import Intent, detect_intent
+from confirmation_store import set_pending
 from desktop_automation import (
     control_media, control_volume, create_folder, get_active_window,
     lock_computer, open_application, open_folder, open_site, open_url,
-    power_action, take_screenshot, web_search,
+    take_screenshot, web_search,
 )
 
 SAMPLE_RATE = 16000
@@ -24,9 +25,14 @@ SPEECH_THRESHOLD = 300
 BACKEND_URL = "http://127.0.0.1:8000"
 
 
-def set_state(state):
+def set_state(state, message=None, confirmation=None):
+    payload = {}
+    if message is not None:
+        payload["message"] = message
+    if confirmation is not None:
+        payload["confirmation"] = confirmation
     try:
-        requests.post(f"{BACKEND_URL}/state/{state}", timeout=2)
+        requests.post(f"{BACKEND_URL}/state/{state}", json=payload, timeout=2)
     except requests.RequestException:
         pass
 
@@ -45,7 +51,25 @@ def handle_local_command(text):
     return responses.get(intent.name)
 
 
+def request_confirmation(intent: Intent) -> str:
+    if intent.name == "power":
+        labels = {"shutdown": "Shut down the computer", "restart": "Restart the computer", "sleep": "Put the computer to sleep"}
+        label = labels.get(intent.argument, intent.argument.title())
+        set_pending("power", intent.argument, label)
+    elif intent.name == "create_folder":
+        label = f"Create folder '{intent.argument}'"
+        set_pending("create_folder", intent.argument, label)
+    else:
+        return "I can't confirm that action."
+    confirmation = {"label": label, "action": intent.name, "argument": intent.argument}
+    set_state("confirmation", f"Confirmation required: {label}.", confirmation)
+    return f"Please confirm: {label}."
+
+
 def execute_intent(intent: Intent) -> str | None:
+    if intent.requires_confirmation:
+        return request_confirmation(intent)
+
     actions = {
         "open_app": lambda: open_application(intent.argument),
         "open_folder": lambda: open_folder(intent.argument),
@@ -57,20 +81,20 @@ def execute_intent(intent: Intent) -> str | None:
         "web_search": lambda: web_search(intent.argument),
         "youtube_search": lambda: web_search(intent.argument, site="youtube"),
         "create_folder": lambda: create_folder(intent.argument),
+        "media": lambda: control_media(intent.argument),
+        "volume": lambda: control_volume(intent.argument),
     }
-    if intent.name == "power":
-        return f"{intent.argument.title()} is available, but NOVA requires confirmation before doing that."
     action = actions.get(intent.name)
     if action is None:
         return None
-    set_state("executing")
+    set_state("executing", "Executing desktop action.")
     try:
         result = action()
-        set_state("success")
+        set_state("success", result)
         return result
     except Exception as error:
         print("Desktop action error:", error)
-        set_state("error")
+        set_state("error", "Desktop action failed.")
         return "I couldn't complete that action."
 
 
@@ -134,7 +158,6 @@ while True:
     print(f"Audio level: {rms:.0f}")
     if rms < SPEECH_THRESHOLD:
         set_state("speaking")
-        print("NOVA: Goodbye.")
         try:
             tts.say("Goodbye.")
             tts.runAndWait()
@@ -195,5 +218,7 @@ while True:
         tts.runAndWait()
     except Exception as error:
         print("❌ TTS error:", error)
+    if detect_intent(user_text) and detect_intent(user_text).requires_confirmation:
+        pass
     set_state("idle")
     print("\n----------------------------------------")

@@ -15,21 +15,22 @@ async function pressToTalkStart() {
   if (pressing) return;
   pressing = true;
   document.body.classList.add("nova-ptt-active");
+  // NOVA's existing voice process records a short bounded window, then
+  // transcribes it. We deliberately do not terminate it on pointer release,
+  // otherwise Whisper could be killed before it finishes processing audio.
   await post("/listen");
 }
 
-async function pressToTalkStop() {
-  if (!pressing) return;
+function pressToTalkRelease() {
   pressing = false;
   document.body.classList.remove("nova-ptt-active");
-  await post("/stop");
 }
 
 function installPushToTalk() {
   const button = document.querySelector(".listen-button");
   if (!button || button.dataset.pttReady === "true") return;
   button.dataset.pttReady = "true";
-  button.title = "Hold to talk. Release to stop. Space also works while the page is focused.";
+  button.title = "Press to talk. NOVA listens in a short bounded window and then processes your command.";
 
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault();
@@ -37,11 +38,11 @@ function installPushToTalk() {
   });
   button.addEventListener("pointerup", (event) => {
     event.preventDefault();
-    pressToTalkStop();
+    pressToTalkRelease();
   });
-  button.addEventListener("pointercancel", pressToTalkStop);
+  button.addEventListener("pointercancel", pressToTalkRelease);
   button.addEventListener("pointerleave", (event) => {
-    if (event.buttons) pressToTalkStop();
+    if (event.buttons) pressToTalkRelease();
   });
   button.addEventListener("click", (event) => {
     event.preventDefault();
@@ -62,10 +63,9 @@ function installKeyboardPushToTalk() {
     const tag = document.activeElement?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
     event.preventDefault();
-    pressToTalkStop();
+    pressToTalkRelease();
   });
-  window.addEventListener("pointerup", pressToTalkStop);
-  window.addEventListener("blur", pressToTalkStop);
+  window.addEventListener("blur", pressToTalkRelease);
 }
 
 async function refreshReactiveState() {
@@ -94,4 +94,4 @@ if (document.readyState === "loading") {
   boot();
 }
 
-export { pressToTalkStart, pressToTalkStop };
+export { pressToTalkStart, pressToTalkRelease };

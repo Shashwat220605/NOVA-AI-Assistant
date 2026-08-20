@@ -3,6 +3,7 @@ import sys
 import subprocess
 import platform
 import psutil
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,10 @@ VOICE_EXE = os.path.join(ROOT_DIR, "dist", "voice_ai", "voice_ai.exe")
 nova_state = {"state": "idle", "message": "Ready.", "confirmation": None}
 voice_process = None
 assets_directory = os.path.join(FRONTEND_DIST, "assets")
+telemetry_cache = None
+telemetry_cache_time = 0.0
+network_sample = None
+
 if os.path.exists(assets_directory):
     app.mount("/assets", StaticFiles(directory=assets_directory), name="assets")
 
@@ -118,23 +123,71 @@ def stop_listening():
     except Exception as error:
         return {"success": False, "message": str(error)}
 
+
+def _network_speed():
+    global network_sample
+    now = time.monotonic()
+    current = psutil.net_io_counters()
+    if network_sample is None:
+        network_sample = (now, current.bytes_sent, current.bytes_recv)
+        return {"upload_kbps": 0.0, "download_kbps": 0.0}
+    old_time, old_sent, old_recv = network_sample
+    elapsed = max(now - old_time, 0.001)
+    network_sample = (now, current.bytes_sent, current.bytes_recv)
+    return {
+        "upload_kbps": round((current.bytes_sent - old_sent) / elapsed / 1024, 1),
+        "download_kbps": round((current.bytes_recv - old_recv) / elapsed / 1024, 1),
+    }
+
+
+def _gpu_telemetry():
+    data = {"name": "NVIDIA GPU", "percent": None, "vram_used_mb": None, "vram_total_mb": None, "temperature_c": None}
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=1.0,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = [p.strip() for p in result.stdout.splitlines()[0].split(",")]
+            if len(parts) >= 5:
+                data = {"name": parts[0], "percent": float(parts[1]), "vram_used_mb": float(parts[2]), "vram_total_mb": float(parts[3]), "temperature_c": float(parts[4])}
+    except Exception:
+        pass
+    return data
+
 @app.get("/system")
 def get_system_telemetry():
+    global telemetry_cache, telemetry_cache_time
+    now = time.monotonic()
+    if telemetry_cache is not None and now - telemetry_cache_time < 3.0:
+        return telemetry_cache
+
     memory = psutil.virtual_memory()
     drive = os.environ.get("SystemDrive") or "C:"
     disk = psutil.disk_usage(drive + "\\")
-    cpu_name = platform.processor() or "Unknown CPU"
-    gpu_name = "NVIDIA GPU"
+    battery = psutil.sensors_battery()
+    cpu_temp = None
     try:
-        result = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=2)
-        if result.returncode == 0 and result.stdout.strip():
-            gpu_name = result.stdout.strip().splitlines()[0]
+        temps = psutil.sensors_temperatures()
+        for entries in temps.values():
+            if entries:
+                cpu_temp = round(entries[0].current, 1)
+                break
     except Exception:
         pass
-    windows_version = platform.system()
-    if windows_version == "Windows":
-        windows_version = f"Windows {platform.release()}"
-    return {"ram": {"total": round(memory.total / 1024**3, 1), "used": round(memory.used / 1024**3, 1), "available": round(memory.available / 1024**3, 1), "percent": memory.percent}, "storage": {"drive": drive, "total": round(disk.total / 1024**3, 1), "used": round(disk.used / 1024**3, 1), "free": round(disk.free / 1024**3, 1), "percent": disk.percent}, "cpu": {"name": cpu_name, "percent": psutil.cpu_percent(interval=None)}, "gpu": {"name": gpu_name}, "system": {"name": windows_version}}
+
+    gpu = _gpu_telemetry()
+    telemetry_cache = {
+        "ram": {"total": round(memory.total / 1024**3, 1), "used": round(memory.used / 1024**3, 1), "available": round(memory.available / 1024**3, 1), "percent": memory.percent},
+        "storage": {"drive": drive, "total": round(disk.total / 1024**3, 1), "used": round(disk.used / 1024**3, 1), "free": round(disk.free / 1024**3, 1), "percent": disk.percent},
+        "cpu": {"name": platform.processor() or "Unknown CPU", "percent": psutil.cpu_percent(interval=None), "temperature_c": cpu_temp},
+        "gpu": gpu,
+        "network": _network_speed(),
+        "battery": {"percent": battery.percent if battery else None, "plugged": battery.power_plugged if battery else None},
+        "system": {"name": f"{platform.system()} {platform.release()}" if platform.system() == "Windows" else platform.system()},
+    }
+    telemetry_cache_time = now
+    return telemetry_cache
 
 @app.get("/health")
 def health():

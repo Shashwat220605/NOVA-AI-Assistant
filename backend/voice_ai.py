@@ -17,7 +17,10 @@ from desktop_automation import (
 )
 
 SAMPLE_RATE = 16000
-SILENCE_TIMEOUT = 5
+MAX_RECORD_SECONDS = 5
+CHUNK_SECONDS = 0.25
+START_TIMEOUT_SECONDS = 2.5
+END_SILENCE_SECONDS = 0.75
 AUDIO_FILE = "voice.wav"
 MICROPHONE_DEVICE = 1
 SPEECH_THRESHOLD = 300
@@ -34,6 +37,38 @@ def set_state(state, message=None, confirmation=None):
         requests.post(f"{BACKEND_URL}/state/{state}", json=payload, timeout=2)
     except requests.RequestException:
         pass
+
+
+def record_speech():
+    """Record only the useful speech window, avoiding unnecessary silence for Whisper."""
+    chunks = []
+    heard_speech = False
+    silent_chunks = 0
+    max_chunks = int(MAX_RECORD_SECONDS / CHUNK_SECONDS)
+    start_timeout_chunks = int(START_TIMEOUT_SECONDS / CHUNK_SECONDS)
+    end_silence_chunks = int(END_SILENCE_SECONDS / CHUNK_SECONDS)
+
+    for index in range(max_chunks):
+        audio = sd.rec(int(CHUNK_SECONDS * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16", device=MICROPHONE_DEVICE)
+        sd.wait()
+        chunks.append(audio)
+        rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+
+        if rms >= SPEECH_THRESHOLD:
+            heard_speech = True
+            silent_chunks = 0
+        elif heard_speech:
+            silent_chunks += 1
+            if silent_chunks >= end_silence_chunks:
+                break
+        elif index + 1 >= start_timeout_chunks:
+            break
+
+    if not heard_speech:
+        return None
+
+    trimmed = chunks[:len(chunks) - silent_chunks] if silent_chunks else chunks
+    return np.concatenate(trimmed, axis=0)
 
 
 def handle_local_command(text):
@@ -131,7 +166,7 @@ print("\n========================================")
 print("             NOVA ONLINE")
 print("========================================")
 print("Microphone device:", MICROPHONE_DEVICE)
-print("NOVA will shut down after 5 seconds without speech.")
+print("Voice capture: up to 5 seconds, silence-aware")
 print("Say 'stop nova' to shut down manually.")
 print("========================================\n")
 set_state("idle")
@@ -140,8 +175,7 @@ while True:
     set_state("listening")
     print("\n🎤 Listening...")
     try:
-        audio = sd.rec(int(SILENCE_TIMEOUT * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16", device=MICROPHONE_DEVICE)
-        sd.wait()
+        audio = record_speech()
     except sd.PortAudioError as error:
         print("🎤 Microphone temporarily unavailable:", error)
         set_state("idle")
@@ -151,18 +185,10 @@ while True:
         set_state("idle")
         continue
 
-    audio_float = audio.astype(np.float32)
-    rms = np.sqrt(np.mean(audio_float ** 2))
-    print(f"Audio level: {rms:.0f}")
-    if rms < SPEECH_THRESHOLD:
-        set_state("speaking")
-        try:
-            tts.say("Goodbye.")
-            tts.runAndWait()
-        except Exception as error:
-            print("TTS error:", error)
+    if audio is None:
+        print("No speech detected.")
         set_state("idle")
-        break
+        continue
 
     try:
         wav.write(AUDIO_FILE, SAMPLE_RATE, audio)

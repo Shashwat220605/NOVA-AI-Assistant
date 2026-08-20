@@ -14,6 +14,11 @@ class CommandEngineTests(unittest.TestCase):
         self.assertEqual(intent.name, "youtube_search")
         self.assertEqual(intent.argument, "python tutorials")
 
+    def test_google_search(self):
+        intent = detect_intent("google for react three fiber")
+        self.assertEqual(intent.name, "web_search")
+        self.assertEqual(intent.argument, "react three fiber")
+
     def test_folder(self):
         intent = detect_intent("show my downloads")
         self.assertEqual(intent.name, "open_folder")
@@ -26,6 +31,12 @@ class CommandEngineTests(unittest.TestCase):
     def test_power_requires_confirmation(self):
         intent = detect_intent("restart my computer")
         self.assertEqual(intent.name, "power")
+        self.assertTrue(intent.requires_confirmation)
+
+    def test_create_folder_requires_confirmation(self):
+        intent = detect_intent("create a folder called AI Projects")
+        self.assertEqual(intent.name, "create_folder")
+        self.assertEqual(intent.argument, "ai projects")
         self.assertTrue(intent.requires_confirmation)
 
     def test_unknown_goes_to_ai(self):

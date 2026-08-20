@@ -3,1266 +3,139 @@ import { Stars } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
-
-/* =========================================================
-   NOVA 3D CORE
-========================================================= */
-
 function NovaCore({ state }) {
-
   const core = useRef();
-  const ring1 = useRef();
-  const ring2 = useRef();
-  const ring3 = useRef();
-
-  const field1 = useRef();
-  const field2 = useRef();
-  const field3 = useRef();
-
+  const ring1 = useRef(); const ring2 = useRef(); const ring3 = useRef();
+  const field1 = useRef(); const field2 = useRef(); const field3 = useRef();
+  const pulseRing = useRef(); const shardRing = useRef();
+  const shock = useRef();
 
   useFrame((scene, delta) => {
-
-    const time =
-      scene.clock.elapsedTime;
-
-
+    const time = scene.clock.elapsedTime;
     if (!core.current) return;
+    const profiles = {
+      idle: { r: .22, p: 1.0, a: .018, f: .12, s: 1 },
+      listening: { r: .7, p: 3.5, a: .085, f: .85, s: 1.08 },
+      thinking: { r: 1.25, p: 5.5, a: .12, f: 1.5, s: 1.13 },
+      speaking: { r: .9, p: 7, a: .15, f: 1.1, s: 1.04 },
+      executing: { r: 1.6, p: 8, a: .17, f: 2.1, s: 1.16 },
+      confirmation: { r: .55, p: 2.5, a: .08, f: .55, s: 1.1 },
+      success: { r: 1.0, p: 10, a: .2, f: 1.8, s: 1.08 },
+      error: { r: 1.8, p: 13, a: .18, f: 2.5, s: 1.05 },
+    };
+    const profile = profiles[state] || profiles.idle;
+    core.current.rotation.x += delta * profile.r;
+    core.current.rotation.y += delta * profile.r * 1.35;
+    const pulse = 1 + Math.sin(time * profile.p) * profile.a;
+    core.current.scale.setScalar(pulse);
 
+    [[ring1, 1, .35], [ring2, -.7, .4], [ring3, .5, .5], [pulseRing, .8, .2], [shardRing, -.6, .7]].forEach(([ref, speed, z]) => {
+      if (!ref.current) return;
+      ref.current.rotation.x += delta * profile.r * speed;
+      ref.current.rotation.y += delta * profile.r * z;
+      ref.current.rotation.z += delta * profile.r * .25;
+    });
+    [[field1, 1, .2], [field2, -.7, .4], [field3, .5, .3]].forEach(([ref, speed, z]) => {
+      if (!ref.current) return;
+      ref.current.rotation.y += delta * profile.f * speed;
+      ref.current.rotation.x += delta * profile.f * z;
+      ref.current.scale.setScalar(profile.s + Math.sin(time * 2 + z) * .025);
+    });
 
-    let rotation = 0.25;
-    let pulseSpeed = 1.2;
-    let pulseAmount = 0.025;
-    let fieldSpeed = 0.15;
-    let fieldScale = 1;
-
-
-    if (state === "listening") {
-
-      rotation = 0.7;
-      pulseSpeed = 3;
-      pulseAmount = 0.09;
-      fieldSpeed = 0.8;
-      fieldScale = 1.08;
-
+    if (shock.current) {
+      const active = state === "success" || state === "error";
+      const phase = (time % 1.15) / 1.15;
+      shock.current.scale.setScalar(active ? .8 + phase * 1.8 : .001);
+      shock.current.material.opacity = active ? (1 - phase) * .45 : 0;
     }
-
-
-    if (state === "thinking") {
-
-      rotation = 1.3;
-      pulseSpeed = 5;
-      pulseAmount = 0.13;
-      fieldSpeed = 1.5;
-      fieldScale = 1.15;
-
-    }
-
-
-    if (state === "speaking") {
-
-      rotation = 0.8;
-      pulseSpeed = 7;
-      pulseAmount = 0.16;
-      fieldSpeed = 1;
-      fieldScale =
-        1 + Math.sin(time * 7) * 0.08;
-
-    }
-
-
-    core.current.rotation.x +=
-      delta * rotation;
-
-    core.current.rotation.y +=
-      delta * rotation * 1.4;
-
-
-    const pulse =
-      1 +
-      Math.sin(
-        time * pulseSpeed
-      ) *
-      pulseAmount;
-
-
-    core.current.scale.set(
-      pulse,
-      pulse,
-      pulse
-    );
-
-
-    if (ring1.current) {
-
-      ring1.current.rotation.x +=
-        delta * rotation;
-
-      ring1.current.rotation.y +=
-        delta * rotation * 0.4;
-
-    }
-
-
-    if (ring2.current) {
-
-      ring2.current.rotation.z +=
-        delta * rotation;
-
-      ring2.current.rotation.x -=
-        delta * rotation * 0.3;
-
-    }
-
-
-    if (ring3.current) {
-
-      ring3.current.rotation.y +=
-        delta * rotation * 0.5;
-
-      ring3.current.rotation.z -=
-        delta * rotation * 0.4;
-
-    }
-
-
-    if (field1.current) {
-
-      field1.current.rotation.y +=
-        delta * fieldSpeed;
-
-      field1.current.rotation.x +=
-        delta * fieldSpeed * 0.2;
-
-      field1.current.scale.setScalar(
-        fieldScale
-      );
-
-    }
-
-
-    if (field2.current) {
-
-      field2.current.rotation.x -=
-        delta * fieldSpeed * 0.7;
-
-      field2.current.rotation.z +=
-        delta * fieldSpeed * 0.4;
-
-      field2.current.scale.setScalar(
-        fieldScale
-      );
-
-    }
-
-
-    if (field3.current) {
-
-      field3.current.rotation.z +=
-        delta * fieldSpeed * 0.5;
-
-      field3.current.rotation.y -=
-        delta * fieldSpeed * 0.3;
-
-      field3.current.scale.setScalar(
-        fieldScale
-      );
-
-    }
-
   });
 
+  return <group>
+    <points ref={field1}><sphereGeometry args={[2.8, 18, 18]} /><pointsMaterial color="#00d9ff" size={.035} transparent opacity={.68} sizeAttenuation /></points>
+    <points ref={field2}><sphereGeometry args={[3.45, 15, 15]} /><pointsMaterial color="#725cff" size={.024} transparent opacity={.45} sizeAttenuation /></points>
+    <points ref={field3}><sphereGeometry args={[4.05, 11, 11]} /><pointsMaterial color="#00aaff" size={.017} transparent opacity={.28} sizeAttenuation /></points>
 
-  return (
+    <mesh ref={core}><icosahedronGeometry args={[1.25, 2]} /><meshStandardMaterial color="#0cecff" emissive="#006eff" emissiveIntensity={3.2} metalness={.86} roughness={.16} /></mesh>
+    <mesh scale={.58}><sphereGeometry args={[1, 28, 28]} /><meshBasicMaterial color="#ffffff" transparent opacity={.92} /></mesh>
 
-    <group>
+    <mesh ref={ring1} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[1.75, .025, 10, 64]} /><meshBasicMaterial color="#00e5ff" /></mesh>
+    <mesh ref={ring2} rotation={[.7, .4, 0]}><torusGeometry args={[2.05, .018, 10, 64]} /><meshBasicMaterial color="#7c5cff" /></mesh>
+    <mesh ref={ring3} rotation={[1.1, .2, .5]}><torusGeometry args={[2.35, .012, 8, 56]} /><meshBasicMaterial color="#008cff" transparent opacity={.58} /></mesh>
+    <mesh ref={pulseRing} rotation={[.35, .9, 0]}><torusGeometry args={[2.65, .009, 8, 56]} /><meshBasicMaterial color="#00d9ff" transparent opacity={.4} /></mesh>
+    <mesh ref={shardRing} rotation={[1.7, .2, .8]}><torusGeometry args={[2.9, .006, 6, 48]} /><meshBasicMaterial color="#9a7cff" transparent opacity={.3} /></mesh>
 
-      <points ref={field1}>
-
-        <sphereGeometry
-          args={[2.8, 20, 20]}
-        />
-
-        <pointsMaterial
-          color="#00d9ff"
-          size={0.035}
-          transparent
-          opacity={0.7}
-          sizeAttenuation
-        />
-
-      </points>
-
-
-      <points ref={field2}>
-
-        <sphereGeometry
-          args={[3.4, 16, 16]}
-        />
-
-        <pointsMaterial
-          color="#587cff"
-          size={0.025}
-          transparent
-          opacity={0.45}
-          sizeAttenuation
-        />
-
-      </points>
-
-
-      <points ref={field3}>
-
-        <sphereGeometry
-          args={[4, 12, 12]}
-        />
-
-        <pointsMaterial
-          color="#00aaff"
-          size={0.018}
-          transparent
-          opacity={0.3}
-          sizeAttenuation
-        />
-
-      </points>
-
-
-      <mesh ref={core}>
-
-        <icosahedronGeometry
-          args={[1.25, 3]}
-        />
-
-        <meshStandardMaterial
-          color="#0cecff"
-          emissive="#006eff"
-          emissiveIntensity={2.5}
-          metalness={0.85}
-          roughness={0.18}
-        />
-
-      </mesh>
-
-
-      <mesh scale={0.58}>
-
-        <sphereGeometry
-          args={[1, 32, 32]}
-        />
-
-        <meshBasicMaterial
-          color="#ffffff"
-          transparent
-          opacity={0.9}
-        />
-
-      </mesh>
-
-
-      <mesh
-        ref={ring1}
-        rotation={[
-          Math.PI / 2,
-          0,
-          0
-        ]}
-      >
-
-        <torusGeometry
-          args={[
-            1.75,
-            0.025,
-            12,
-            80
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#00e5ff"
-        />
-
-      </mesh>
-
-
-      <mesh
-        ref={ring2}
-        rotation={[
-          0.7,
-          0.4,
-          0
-        ]}
-      >
-
-        <torusGeometry
-          args={[
-            2.05,
-            0.018,
-            12,
-            80
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#7c5cff"
-        />
-
-      </mesh>
-
-
-      <mesh
-        ref={ring3}
-        rotation={[
-          1.1,
-          0.2,
-          0.5
-        ]}
-      >
-
-        <torusGeometry
-          args={[
-            2.35,
-            0.012,
-            10,
-            70
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#008cff"
-          transparent
-          opacity={0.6}
-        />
-
-      </mesh>
-
-
-      <pointLight
-        position={[0, 0, 2]}
-        intensity={18}
-        color="#00e5ff"
-      />
-
-      <pointLight
-        position={[2, 2, -2]}
-        intensity={8}
-        color="#684cff"
-      />
-
-    </group>
-
-  );
-
+    <mesh ref={shock}><torusGeometry args={[1.35, .018, 8, 64]} /><meshBasicMaterial color="#ffffff" transparent opacity={0} /></mesh>
+    <pointLight position={[0, 0, 2]} intensity={20} color="#00e5ff" />
+    <pointLight position={[2, 2, -2]} intensity={9} color="#684cff" />
+  </group>;
 }
 
-
-/* =========================================================
-   TELEMETRY BAR
-========================================================= */
-
-function TelemetryBar({
-  value
-}) {
-
-  return (
-
-    <div className="telemetry-bar">
-
-      <div
-        className="telemetry-bar-fill"
-        style={{
-          width: `${Math.min(
-            Math.max(value, 0),
-            100
-          )}%`
-        }}
-      />
-
-    </div>
-
-  );
-
+function TelemetryBar({ value }) {
+  return <div className="telemetry-bar"><div className="telemetry-bar-fill" style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} /></div>;
 }
 
-
-/* =========================================================
-   SYSTEM TELEMETRY
-========================================================= */
-
-function SystemTelemetry({
-  telemetry
-}) {
-
-  if (!telemetry) {
-
-    return (
-
-      <aside className="telemetry-panel">
-
-        <div className="telemetry-header">
-
-          <span>
-            SYSTEM TELEMETRY
-          </span>
-
-          <span className="telemetry-live">
-            ● LIVE
-          </span>
-
-        </div>
-
-        <div className="telemetry-loading">
-          INITIALIZING...
-        </div>
-
-      </aside>
-
-    );
-
-  }
-
-
-  return (
-
-    <aside className="telemetry-panel">
-
-      <div className="telemetry-header">
-
-        <span>
-          SYSTEM TELEMETRY
-        </span>
-
-        <span className="telemetry-live">
-          ● LIVE
-        </span>
-
-      </div>
-
-
-      {/* RAM */}
-
-      <div className="telemetry-section">
-
-        <div className="telemetry-section-title">
-          MEMORY
-        </div>
-
-
-        <div className="telemetry-name">
-
-          {telemetry.ram.total} GB RAM
-
-        </div>
-
-
-        <TelemetryBar
-          value={telemetry.ram.percent}
-        />
-
-
-        <div className="telemetry-values">
-
-          <span>
-            {telemetry.ram.used} GB USED
-          </span>
-
-          <span>
-            {telemetry.ram.available} GB FREE
-          </span>
-
-        </div>
-
-      </div>
-
-
-      {/* STORAGE */}
-
-      <div className="telemetry-section">
-
-        <div className="telemetry-section-title">
-          STORAGE
-        </div>
-
-
-        <div className="telemetry-name">
-
-          {telemetry.storage.drive}
-
-        </div>
-
-
-        <TelemetryBar
-          value={telemetry.storage.percent}
-        />
-
-
-        <div className="telemetry-values">
-
-          <span>
-            {telemetry.storage.used} GB USED
-          </span>
-
-          <span>
-            {telemetry.storage.free} GB FREE
-          </span>
-
-        </div>
-
-      </div>
-
-
-      {/* CPU */}
-
-      <div className="telemetry-section">
-
-        <div className="telemetry-section-title">
-          CPU
-        </div>
-
-
-        <div className="telemetry-name telemetry-truncate">
-
-          {telemetry.cpu.name}
-
-        </div>
-
-
-        <TelemetryBar
-          value={telemetry.cpu.percent}
-        />
-
-
-        <div className="telemetry-values">
-
-          <span>
-            USAGE
-          </span>
-
-          <span>
-            {telemetry.cpu.percent}%
-          </span>
-
-        </div>
-
-      </div>
-
-
-      {/* GPU */}
-
-      <div className="telemetry-section gpu-section">
-
-        <div className="telemetry-section-title">
-          GPU
-        </div>
-
-
-        <div className="telemetry-name telemetry-truncate">
-
-          {telemetry.gpu.name}
-
-        </div>
-
-      </div>
-
-
-      {/* SYSTEM */}
-
-      <div className="telemetry-system">
-
-        {telemetry.system.name}
-
-      </div>
-
-    </aside>
-
-  );
-
+function SystemTelemetry({ telemetry }) {
+  if (!telemetry) return <aside className="telemetry-panel"><div className="telemetry-header"><span>SYSTEM TELEMETRY</span><span className="telemetry-live">● LIVE</span></div><div className="telemetry-loading">INITIALIZING...</div></aside>;
+  return <aside className="telemetry-panel">
+    <div className="telemetry-header"><span>SYSTEM TELEMETRY</span><span className="telemetry-live">● LIVE</span></div>
+    <div className="telemetry-section"><div className="telemetry-section-title">MEMORY</div><div className="telemetry-name">{telemetry.ram.total} GB RAM</div><TelemetryBar value={telemetry.ram.percent} /><div className="telemetry-values"><span>{telemetry.ram.used} GB USED</span><span>{telemetry.ram.available} GB FREE</span></div></div>
+    <div className="telemetry-section"><div className="telemetry-section-title">STORAGE</div><div className="telemetry-name">{telemetry.storage.drive}</div><TelemetryBar value={telemetry.storage.percent} /><div className="telemetry-values"><span>{telemetry.storage.used} GB USED</span><span>{telemetry.storage.free} GB FREE</span></div></div>
+    <div className="telemetry-section"><div className="telemetry-section-title">CPU</div><div className="telemetry-name telemetry-truncate">{telemetry.cpu.name}</div><TelemetryBar value={telemetry.cpu.percent} /><div className="telemetry-values"><span>USAGE</span><span>{telemetry.cpu.percent}%</span></div></div>
+    <div className="telemetry-section"><div className="telemetry-section-title">GPU</div><div className="telemetry-name telemetry-truncate">{telemetry.gpu.name}</div><div className="telemetry-values"><span>{telemetry.gpu.percent ?? 0}% LOAD</span><span>{telemetry.gpu.temperature != null ? `${telemetry.gpu.temperature}°C` : "TEMP N/A"}</span></div></div>
+    <div className="telemetry-values"><span>VRAM</span><span>{telemetry.gpu.vram_used ?? 0}/{telemetry.gpu.vram_total ?? 0} MB</span></div>
+    <div className="telemetry-values"><span>NET ↓ {telemetry.network?.download_kbps ?? 0} KB/s</span><span>↑ {telemetry.network?.upload_kbps ?? 0} KB/s</span></div>
+    <div className="telemetry-values"><span>BATTERY</span><span>{telemetry.battery?.percent ?? "N/A"}% {telemetry.battery?.plugged ? "⚡" : ""}</span></div>
+    <div className="telemetry-system">{telemetry.system.name}</div>
+  </aside>;
 }
 
-
-/* =========================================================
-   CONVERSATION HUD
-========================================================= */
-
-function ConversationHUD({
-  conversation
-}) {
-
-  return (
-
-    <div className="conversation-hud">
-
-      <div className="hud-header">
-
-        <div className="hud-title">
-          NOVA // CONVERSATION
-        </div>
-
-        <div className="hud-line"></div>
-
-        <div className="hud-live">
-          LIVE
-        </div>
-
-      </div>
-
-
-      <div className="conversation-content">
-
-        {conversation.length === 0 ? (
-
-          <div className="conversation-empty">
-
-            <div className="empty-symbol">
-              ◉
-            </div>
-
-            <div>
-              WAITING FOR CONVERSATION
-            </div>
-
-          </div>
-
-        ) : (
-
-          conversation.map(
-            (item, index) => (
-
-              <div
-                className={
-                  `conversation-item ${item.role}`
-                }
-                key={`${item.role}-${index}`}
-              >
-
-                <div className="conversation-role">
-
-                  {item.role === "user"
-                    ? "YOU"
-                    : "NOVA"
-                  }
-
-                </div>
-
-
-                <div className="conversation-text">
-
-                  {item.text}
-
-                </div>
-
-              </div>
-
-            )
-
-          )
-
-        )}
-
-      </div>
-
-    </div>
-
-  );
-
+function ConversationHUD({ conversation }) {
+  return <div className="conversation-hud"><div className="hud-header"><div className="hud-title">NOVA // CONVERSATION</div><div className="hud-line" /><div className="hud-live">LIVE</div></div><div className="conversation-content">
+    {conversation.length === 0 ? <div className="conversation-empty"><div className="empty-symbol">◉</div><div>WAITING FOR CONVERSATION</div></div> : conversation.map((item, index) => <div className={`conversation-item ${item.role}`} key={`${item.role}-${index}`}><div className="conversation-role">{item.role === "user" ? "YOU" : "NOVA"}</div><div className="conversation-text">{item.text}</div></div>)}
+  </div></div>;
 }
-
-
-/* =========================================================
-   MAIN APP
-========================================================= */
 
 function App() {
-
-  const [nova, setNova] = useState({
-
-    state: "idle",
-
-    message: "How can I help you?"
-
-  });
-
-
-  const [conversation, setConversation] =
-    useState([]);
-
-
-  const [telemetry, setTelemetry] =
-    useState(null);
-
-
-  const [startingVoice, setStartingVoice] =
-    useState(false);
-
-
-  /* =======================================================
-     NOVA STATE
-  ======================================================= */
+  const [nova, setNova] = useState({ state: "idle", message: "How can I help you?" });
+  const [conversation, setConversation] = useState([]);
+  const [telemetry, setTelemetry] = useState(null);
+  const [startingVoice, setStartingVoice] = useState(false);
 
   useEffect(() => {
-
-    const getState = async () => {
-
-      try {
-
-        const response = await fetch(
-          "http://127.0.0.1:8000/state"
-        );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            "State request failed"
-          );
-
-        }
-
-
-        const data =
-          await response.json();
-
-
-        setNova(data);
-
-      } catch (error) {
-
-        console.error(
-          "NOVA state error:",
-          error
-        );
-
-      }
-
-    };
-
-
-    getState();
-
-
-    const interval =
-      setInterval(
-        getState,
-        500
-      );
-
-
-    return () => {
-
-      clearInterval(interval);
-
-    };
-
+    const getState = async () => { try { const response = await fetch("http://127.0.0.1:8000/state"); if (!response.ok) throw new Error("State request failed"); setNova(await response.json()); } catch (error) { console.error("NOVA state error:", error); } };
+    getState(); const interval = setInterval(getState, 500); return () => clearInterval(interval);
   }, []);
 
-
-  /* =======================================================
-     SYSTEM TELEMETRY
-     
-     Only requests every 2 seconds.
-     This deliberately does NOT run every frame.
-  ======================================================= */
-
   useEffect(() => {
-
     let mounted = true;
-
-
-    const getTelemetry = async () => {
-
-      try {
-
-        const response = await fetch(
-          "http://127.0.0.1:8000/system"
-        );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Telemetry request failed"
-          );
-
-        }
-
-
-        const data =
-          await response.json();
-
-
-        if (mounted) {
-
-          setTelemetry(data);
-
-        }
-
-      } catch (error) {
-
-        console.error(
-          "Telemetry error:",
-          error
-        );
-
-      }
-
-    };
-
-
-    getTelemetry();
-
-
-    const interval =
-      setInterval(
-        getTelemetry,
-        2000
-      );
-
-
-    return () => {
-
-      mounted = false;
-
-      clearInterval(interval);
-
-    };
-
+    let last = null;
+    const getTelemetry = async () => { try { const response = await fetch("http://127.0.0.1:8000/system"); if (!response.ok) throw new Error("Telemetry request failed"); const data = await response.json(); if (mounted) { setTelemetry(data); last = data; } } catch (error) { console.error("Telemetry error:", error); } };
+    getTelemetry(); const interval = setInterval(getTelemetry, 3000); return () => { mounted = false; clearInterval(interval); };
   }, []);
-
-
-  /* =======================================================
-     START LISTENING
-  ======================================================= */
 
   const startListening = async () => {
-
-    if (startingVoice) {
-
-      return;
-
-    }
-
-
-    try {
-
-      setStartingVoice(true);
-
-
-      const response = await fetch(
-
-        "http://127.0.0.1:8000/listen",
-
-        {
-          method: "POST"
-        }
-
-      );
-
-
-      const data =
-        await response.json();
-
-
-      console.log(
-        "NOVA voice:",
-        data
-      );
-
-
-      if (!data.success) {
-
-        console.error(
-          "NOVA could not start:",
-          data.message
-        );
-
-      }
-
-    } catch (error) {
-
-      console.error(
-        "Could not activate NOVA:",
-        error
-      );
-
-    } finally {
-
-      setStartingVoice(false);
-
-    }
-
+    if (startingVoice) return;
+    try { setStartingVoice(true); const response = await fetch("http://127.0.0.1:8000/listen", { method: "POST" }); const data = await response.json(); if (!data.success) console.error("NOVA could not start:", data.message); }
+    catch (error) { console.error("Could not activate NOVA:", error); } finally { setStartingVoice(false); }
   };
 
-
-  /* =======================================================
-     STATE LABELS
-  ======================================================= */
-
-  const stateLabels = {
-
-    idle: "READY",
-
-    listening: "LISTENING",
-
-    thinking: "THINKING",
-
-    speaking: "SPEAKING"
-
-  };
-
-
-  const stateDescriptions = {
-
-    idle:
-      "Awaiting your command",
-
-    listening:
-      "Listening for your voice",
-
-    thinking:
-      "Processing your request",
-
-    speaking:
-      "NOVA is responding"
-
-  };
-
-
-  return (
-
-    <div className="nova">
-
-      <div className="grid-background"></div>
-
-      <div className="scanline"></div>
-
-
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
-      <header className="header">
-
-        <div>
-
-          <div className="logo">
-            NOVA
-          </div>
-
-          <div className="subtitle">
-            PERSONAL AI SYSTEM
-          </div>
-
-        </div>
-
-
-        <div className="system-status">
-
-          <span className="status-light"></span>
-
-          <div>
-
-            <div className="online">
-              SYSTEM ONLINE
-            </div>
-
-            <div className="status-detail">
-              LOCAL INTERFACE
-            </div>
-
-          </div>
-
-        </div>
-
-      </header>
-
-
-      {/* =================================================
-          LEFT PANEL
-      ================================================= */}
-
-      <aside className="panel left-panel">
-
-        <div className="panel-title">
-          SYSTEM
-        </div>
-
-
-        <div className="stat">
-
-          <span>
-            VOICE
-          </span>
-
-          <strong>
-            ACTIVE
-          </strong>
-
-        </div>
-
-
-        <div className="stat">
-
-          <span>
-            AI ENGINE
-          </span>
-
-          <strong>
-            GEMINI
-          </strong>
-
-        </div>
-
-
-        <div className="stat">
-
-          <span>
-            VISION
-          </span>
-
-          <strong>
-            3D CORE
-          </strong>
-
-        </div>
-
-
-        <div className="stat">
-
-          <span>
-            STATUS
-          </span>
-
-          <strong>
-            {stateLabels[nova.state] || "READY"}
-          </strong>
-
-        </div>
-
-      </aside>
-
-
-      {/* =================================================
-          TELEMETRY
-      ================================================= */}
-
-      <SystemTelemetry
-        telemetry={telemetry}
-      />
-
-
-      {/* =================================================
-          3D CORE
-      ================================================= */}
-
-      <main className="core-container">
-
-        <div className="core-label">
-          NOVA CORE
-        </div>
-
-
-        <div className="core-scene">
-
-          <Canvas
-
-            camera={{
-              position: [
-                0,
-                0,
-                7
-              ],
-
-              fov: 45
-            }}
-
-            dpr={[
-              1,
-              1.5
-            ]}
-
-            gl={{
-              antialias: true,
-              powerPreference:
-                "high-performance"
-            }}
-
-          >
-
-            <ambientLight
-              intensity={0.15}
-            />
-
-
-            <Stars
-
-              radius={35}
-
-              depth={15}
-
-              count={500}
-
-              factor={1.2}
-
-              saturation={0}
-
-              fade
-
-              speed={0.25}
-
-            />
-
-
-            <NovaCore
-              state={nova.state}
-            />
-
-          </Canvas>
-
-        </div>
-
-
-        {/* =================================================
-            STATE
-        ================================================= */}
-
-        <div className="core-state">
-
-          <div className="state-indicator">
-
-            <span
-              className={
-                `state-dot ${nova.state}`
-              }
-            ></span>
-
-            {stateLabels[nova.state] || "READY"}
-
-          </div>
-
-
-          <div className="state-description">
-
-            {
-              stateDescriptions[nova.state]
-              || "Awaiting your command"
-            }
-
-          </div>
-
-        </div>
-
-
-        {/* =================================================
-            MESSAGE
-        ================================================= */}
-
-        <div className="nova-message">
-
-          {nova.message}
-
-        </div>
-
-
-        {/* =================================================
-            LISTEN BUTTON
-        ================================================= */}
-
-        <button
-
-          className={
-            `listen-button ${
-              nova.state === "listening"
-                ? "active"
-                : ""
-            }`
-          }
-
-          onClick={startListening}
-
-          disabled={
-            startingVoice ||
-            nova.state === "listening"
-          }
-
-        >
-
-          <span className="listen-icon">
-            ◉
-          </span>
-
-
-          {startingVoice
-
-            ? "ACTIVATING..."
-
-            : nova.state === "listening"
-
-              ? "LISTENING..."
-
-              : "LISTEN"
-
-          }
-
-        </button>
-
-      </main>
-
-
-      {/* =================================================
-          CONVERSATION HUD
-      ================================================= */}
-
-      <ConversationHUD
-        conversation={conversation}
-      />
-
-
-      {/* =================================================
-          FOOTER
-      ================================================= */}
-
-      <footer className="footer">
-
-        <div>
-          NOVA v1.0
-        </div>
-
-
-        <div className="footer-center">
-
-          <span>
-            VOICE INTERFACE
-          </span>
-
-          <span>
-            •
-          </span>
-
-          <span>
-            AI CORE
-          </span>
-
-          <span>
-            •
-          </span>
-
-          <span>
-            3D ENGINE
-          </span>
-
-        </div>
-
-
-        <div>
-          {nova.state.toUpperCase()}
-        </div>
-
-      </footer>
-
-    </div>
-
-  );
-
+  const stateLabels = { idle: "READY", listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", executing: "EXECUTING", success: "SUCCESS", error: "ERROR", confirmation: "CONFIRM" };
+  const displayState = stateLabels[nova.state] || "READY";
+
+  return <main className="nova-app">
+    <div className="nova-background"><div className="nova-grid" /><div className="nova-vignette" /></div>
+    <header className="nova-header"><div className="nova-brand"><span className="brand-mark">N</span><div><div className="brand-title">NOVA</div><div className="brand-subtitle">NEURAL OPERATIONS & VOICE ASSISTANT</div></div></div><div className={`nova-status status-${nova.state}`}><span className="status-dot" />{displayState}</div></header>
+    <section className="nova-main">
+      <aside className="nova-left"><SystemTelemetry telemetry={telemetry} /></aside>
+      <section className="nova-center">
+        <div className="core-scene"><Canvas camera={{ position: [0, 0, 7], fov: 48 }} dpr={[1, 1.5]} gl={{ antialias: true, powerPreference: "high-performance" }}><color attach="background" args={["#02070d"]} /><Stars radius={80} depth={40} count={700} factor={2} saturation={0} fade speed={0.35} /><NovaCore state={nova.state} /></Canvas></div>
+        <div className="core-readout"><div className="core-label">{displayState}</div><div className="core-message">{nova.message}</div></div>
+        <button className={`listen-button ${startingVoice ? "starting" : ""}`} onClick={startListening}>{startingVoice ? "INITIALIZING..." : "ACTIVATE NOVA"}</button>
+      </section>
+      <aside className="nova-right"><ConversationHUD conversation={conversation} /></aside>
+    </section>
+    <footer className="nova-footer"><span>NOVA CORE 2.0</span><span>LOCAL CONTROL ACTIVE</span><span>GEMINI LINK ONLINE</span></footer>
+  </main>;
 }
-
 
 export default App;

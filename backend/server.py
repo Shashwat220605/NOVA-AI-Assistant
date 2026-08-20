@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from confirmation_store import clear_pending, get_pending
-from desktop_automation import create_folder, power_action
+from backend.confirmation_store import clear_pending, get_pending
+from backend.desktop_automation import create_folder, power_action
 
 app = FastAPI(title="NOVA AI", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])

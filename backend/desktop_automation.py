@@ -1,11 +1,10 @@
 """Lightweight, Windows-focused desktop automation tools for NOVA.
 
-The module intentionally avoids background polling, OCR, browser drivers, or
-heavy automation frameworks. Actions run only when explicitly requested.
+Actions run only when explicitly requested. No background polling, OCR,
+browser drivers, or heavy automation services are used.
 """
 
 import os
-import shutil
 import subprocess
 import webbrowser
 from datetime import datetime
@@ -16,7 +15,6 @@ from urllib.parse import quote_plus
 HOME = Path.home()
 PICTURES = HOME / "Pictures"
 SCREENSHOT_DIR = PICTURES / "NOVA Screenshots"
-
 
 APP_ALIASES = {
     "chrome": [
@@ -119,6 +117,46 @@ def take_screenshot() -> str:
         return "I couldn't take the screenshot."
 
 
+def control_media(action: str) -> str:
+    """Use Windows media keys only when requested."""
+    keys = {
+        "play": "playpause",
+        "pause": "playpause",
+        "playpause": "playpause",
+        "next": "nexttrack",
+        "previous": "prevtrack",
+    }
+    key = keys.get(action)
+    if not key:
+        return "That media action isn't supported."
+    try:
+        import pyautogui
+        pyautogui.press(key)
+        return f"Media {action}."
+    except Exception as error:
+        print("Media control error:", error)
+        return "I couldn't control media."
+
+
+def control_volume(action: str) -> str:
+    """Use Windows volume keys on demand. No persistent audio process."""
+    keys = {
+        "up": "volumeup",
+        "down": "volumedown",
+        "mute": "volumemute",
+    }
+    key = keys.get(action)
+    if not key:
+        return "That volume action isn't supported."
+    try:
+        import pyautogui
+        pyautogui.press(key)
+        return {"up": "Volume increased.", "down": "Volume decreased.", "mute": "Volume muted or unmuted."}[action]
+    except Exception as error:
+        print("Volume control error:", error)
+        return "I couldn't control the volume."
+
+
 def open_url(url: str) -> str:
     if not url.startswith(("https://", "http://")):
         url = "https://" + url
@@ -185,6 +223,8 @@ def available_tools() -> list[str]:
         "open_application",
         "open_folder",
         "take_screenshot",
+        "control_media",
+        "control_volume",
         "open_url",
         "web_search",
         "create_folder",

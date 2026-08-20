@@ -3,10 +3,14 @@ import sys
 import subprocess
 import platform
 import psutil
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+from confirmation_store import clear_pending, get_pending
+from desktop_automation import create_folder, power_action
 
 app = FastAPI(title="NOVA AI", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -14,7 +18,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIST = os.path.join(ROOT_DIR, "frontend", "dist")
 VOICE_EXE = os.path.join(ROOT_DIR, "dist", "voice_ai", "voice_ai.exe")
-nova_state = {"state": "idle", "message": "Ready."}
+nova_state = {"state": "idle", "message": "Ready.", "confirmation": None}
 voice_process = None
 assets_directory = os.path.join(FRONTEND_DIST, "assets")
 if os.path.exists(assets_directory):
@@ -29,20 +33,53 @@ def serve_frontend():
 
 @app.get("/state")
 def get_state():
-    global voice_process
-    if voice_process is not None and voice_process.poll() is not None:
-        voice_process = None
-        if nova_state["state"] in ["listening", "thinking", "speaking", "executing"]:
-            nova_state["state"] = "idle"
-            nova_state["message"] = "Ready."
     return nova_state
 
 @app.post("/state/{state}")
-def update_state(state: str):
-    messages = {"idle": "Ready.", "listening": "Listening for your voice.", "thinking": "NOVA is thinking.", "speaking": "NOVA is speaking.", "executing": "Executing desktop action.", "success": "Action completed successfully.", "error": "Desktop action failed."}
+def update_state(state: str, payload: dict | None = None):
+    messages = {"idle": "Ready.", "listening": "Listening for your voice.", "thinking": "NOVA is thinking.", "speaking": "NOVA is speaking.", "executing": "Executing desktop action.", "success": "Action completed successfully.", "error": "Desktop action failed.", "confirmation": "Confirmation required."}
     nova_state["state"] = state
-    nova_state["message"] = messages.get(state, "NOVA is active.")
-    return {"success": True, "state": state, "message": nova_state["message"]}
+    nova_state["message"] = (payload or {}).get("message") or messages.get(state, "NOVA is active.")
+    if state == "confirmation":
+        nova_state["confirmation"] = (payload or {}).get("confirmation")
+    elif state not in {"speaking", "listening", "thinking"}:
+        nova_state["confirmation"] = None
+    return {"success": True, **nova_state}
+
+@app.post("/confirm")
+def confirm_action():
+    pending = get_pending()
+    if not pending:
+        return {"success": False, "message": "There is no pending action."}
+    try:
+        if pending["action"] == "power":
+            result = power_action(pending["argument"])
+        elif pending["action"] == "create_folder":
+            result = create_folder(pending["argument"])
+        else:
+            clear_pending()
+            nova_state["state"] = "error"
+            nova_state["message"] = "Unsupported protected action."
+            return {"success": False, "message": nova_state["message"]}
+        clear_pending()
+        nova_state["confirmation"] = None
+        nova_state["state"] = "success"
+        nova_state["message"] = result
+        return {"success": True, "message": result}
+    except Exception as error:
+        clear_pending()
+        nova_state["confirmation"] = None
+        nova_state["state"] = "error"
+        nova_state["message"] = "The action could not be completed."
+        return {"success": False, "message": str(error)}
+
+@app.post("/cancel")
+def cancel_action():
+    clear_pending()
+    nova_state["confirmation"] = None
+    nova_state["state"] = "idle"
+    nova_state["message"] = "Action cancelled."
+    return {"success": True, "message": "Action cancelled."}
 
 @app.post("/listen")
 def start_listening():

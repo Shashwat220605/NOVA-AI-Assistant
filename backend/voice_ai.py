@@ -11,17 +11,10 @@ from google import genai
 
 from command_engine import Intent, detect_intent
 from desktop_automation import (
-    control_media,
-    control_volume,
-    create_folder,
-    lock_computer,
-    open_application,
-    open_folder,
-    open_url,
-    take_screenshot,
-    web_search,
+    control_media, control_volume, create_folder, get_active_window,
+    lock_computer, open_application, open_folder, open_site, open_url,
+    power_action, take_screenshot, web_search,
 )
-
 
 SAMPLE_RATE = 16000
 SILENCE_TIMEOUT = 5
@@ -42,15 +35,10 @@ def handle_local_command(text):
     intent = detect_intent(text)
     if intent is None:
         return None
-
     responses = {
         "greeting": "Hello. How can I help you?",
         "identity": "My name is NOVA. I am your personal AI assistant.",
-        "capabilities": (
-            "I can answer questions, control supported computer tasks, open apps "
-            "and folders, take screenshots, control media and volume, search the "
-            "web, and control my visual interface."
-        ),
+        "capabilities": "I can answer questions, control supported computer tasks, open apps and folders, identify the active window, take screenshots, control media and volume, and open or search websites.",
         "status": "I'm online and ready.",
         "time": f"The current time is {datetime.now().strftime('%I:%M %p')}.",
     }
@@ -58,32 +46,35 @@ def handle_local_command(text):
 
 
 def execute_intent(intent: Intent) -> str | None:
-    """Execute only explicit, lightweight automation actions."""
     actions = {
         "open_app": lambda: open_application(intent.argument),
         "open_folder": lambda: open_folder(intent.argument),
+        "active_window": get_active_window,
         "screenshot": take_screenshot,
         "lock": lock_computer,
-        "media": lambda: control_media(intent.argument),
-        "volume": lambda: control_volume(intent.argument),
+        "open_site": lambda: open_site(intent.argument),
         "open_url": lambda: open_url(intent.argument),
         "web_search": lambda: web_search(intent.argument),
         "youtube_search": lambda: web_search(intent.argument, site="youtube"),
         "create_folder": lambda: create_folder(intent.argument),
     }
-
     if intent.name == "power":
-        return (
-            f"{intent.argument.title()} is available, but NOVA requires "
-            "confirmation before doing that."
-        )
-
+        return f"{intent.argument.title()} is available, but NOVA requires confirmation before doing that."
     action = actions.get(intent.name)
-    return action() if action else None
+    if action is None:
+        return None
+    set_state("executing")
+    try:
+        result = action()
+        set_state("success")
+        return result
+    except Exception as error:
+        print("Desktop action error:", error)
+        set_state("error")
+        return "I couldn't complete that action."
 
 
 def handle_desktop_command(text):
-    """Route commands without a local AI model or background processing."""
     intent = detect_intent(text)
     if intent is None:
         return None
@@ -96,31 +87,24 @@ print("Connecting to Gemini...")
 client = genai.Client()
 chat = client.chats.create(
     model="gemini-3.6-flash",
-    config={
-        "system_instruction": """
+    config={"system_instruction": """
 You are NOVA, a personal AI voice assistant.
 Your name is NOVA.
 Gemini is the AI model powering you. You are not Gemini.
-If asked your name, say NOVA.
-If asked who you are, say you are NOVA, their personal AI assistant.
+If asked your name, say NOVA. If asked who you are, say you are NOVA, their personal AI assistant.
 If asked what powers you, explain that Google Gemini powers your AI responses.
 Never introduce yourself as Gemini. Never claim to be human.
-Be helpful, natural, and concise.
-You are a desktop AI assistant.
-"""
-    },
+Be helpful, natural, and concise. You are a desktop AI assistant.
+"""},
 )
-
 
 print("Initializing voice system...")
 tts = pyttsx3.init()
 tts.setProperty("rate", 175)
-
 print("\nLoading Whisper model...")
 print("This may take a little while on CPU.\n")
 model = whisper.load_model("base")
 print("Whisper loaded.")
-
 print("\n========================================")
 print("             NOVA ONLINE")
 print("========================================")
@@ -128,21 +112,13 @@ print("Microphone device:", MICROPHONE_DEVICE)
 print("NOVA will shut down after 5 seconds without speech.")
 print("Say 'stop nova' to shut down manually.")
 print("========================================\n")
-
 set_state("idle")
 
 while True:
     set_state("listening")
     print("\n🎤 Listening...")
-
     try:
-        audio = sd.rec(
-            int(SILENCE_TIMEOUT * SAMPLE_RATE),
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype="int16",
-            device=MICROPHONE_DEVICE,
-        )
+        audio = sd.rec(int(SILENCE_TIMEOUT * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16", device=MICROPHONE_DEVICE)
         sd.wait()
     except sd.PortAudioError as error:
         print("🎤 Microphone temporarily unavailable:", error)
@@ -156,7 +132,6 @@ while True:
     audio_float = audio.astype(np.float32)
     rms = np.sqrt(np.mean(audio_float ** 2))
     print(f"Audio level: {rms:.0f}")
-
     if rms < SPEECH_THRESHOLD:
         set_state("speaking")
         print("NOVA: Goodbye.")
@@ -177,7 +152,6 @@ while True:
 
     print("\n🧠 Understanding...")
     set_state("thinking")
-
     try:
         result = model.transcribe(AUDIO_FILE)
         user_text = result["text"].strip()
@@ -185,14 +159,12 @@ while True:
         print("❌ Whisper error:", error)
         set_state("idle")
         continue
-
     if not user_text:
         set_state("idle")
         continue
-
     print("\nYou:", user_text)
-    intent = detect_intent(user_text)
 
+    intent = detect_intent(user_text)
     if intent and intent.name == "stop":
         set_state("speaking")
         try:
@@ -203,12 +175,9 @@ while True:
         set_state("idle")
         break
 
-    # Local commands are resolved before Gemini. This keeps simple actions
-    # fast and avoids unnecessary network/model work on a mid-range laptop.
     ai_response = handle_local_command(user_text)
     if ai_response is None:
         ai_response = handle_desktop_command(user_text)
-
     if ai_response is None:
         print("🤖 NOVA is thinking...")
         try:
@@ -220,13 +189,11 @@ while True:
 
     print("\nNOVA:")
     print(ai_response)
-
     set_state("speaking")
     try:
         tts.say(ai_response)
         tts.runAndWait()
     except Exception as error:
         print("❌ TTS error:", error)
-
     set_state("idle")
     print("\n----------------------------------------")

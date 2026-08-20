@@ -16,10 +16,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIST = os.path.join(ROOT_DIR, "frontend", "dist")
 VOICE_EXE = os.path.join(ROOT_DIR, "dist", "voice_ai", "voice_ai.exe")
-
 nova_state = {"state": "idle", "message": "Ready."}
 voice_process = None
-
 assets_directory = os.path.join(FRONTEND_DIST, "assets")
 if os.path.exists(assets_directory):
     app.mount("/assets", StaticFiles(directory=assets_directory), name="assets")
@@ -43,15 +41,7 @@ def get_state():
 
 @app.post("/state/{state}")
 def update_state(state: str):
-    messages = {
-        "idle": "Ready.",
-        "listening": "Listening for your voice.",
-        "thinking": "NOVA is thinking.",
-        "speaking": "NOVA is speaking.",
-        "executing": "Executing desktop action.",
-        "success": "Action completed successfully.",
-        "error": "Desktop action failed.",
-    }
+    messages = {"idle": "Ready.", "listening": "Listening for your voice.", "thinking": "NOVA is thinking.", "speaking": "NOVA is speaking.", "executing": "Executing desktop action.", "success": "Action completed successfully.", "error": "Desktop action failed."}
     nova_state["state"] = state
     nova_state["message"] = messages.get(state, "NOVA is active.")
     return {"success": True, "state": state, "message": nova_state["message"]}
@@ -88,7 +78,7 @@ def stop_listening():
             voice_process.wait()
         voice_process = None
         nova_state["state"] = "idle"
-        nova_state["message"] = "NOVA is offline."
+        nova_state["message"] = "Ready."
         return {"success": True, "message": "NOVA voice system stopped."}
     except Exception as error:
         return {"success": False, "message": str(error)}

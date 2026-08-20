@@ -1,8 +1,4 @@
-"""Lightweight intent routing for NOVA.
-
-No local LLM, OCR, embeddings, or continuous processing is used here.
-Commands are normalized and routed deterministically to keep CPU/RAM usage low.
-"""
+"""Lightweight deterministic intent routing for NOVA."""
 
 import re
 from dataclasses import dataclass
@@ -27,13 +23,12 @@ APP_ALIASES = {
 }
 
 FOLDER_ALIASES = {
-    "desktop": ("desktop",),
-    "downloads": ("downloads", "download"),
-    "documents": ("documents", "document"),
-    "pictures": ("pictures", "photos"),
-    "music": ("music",),
-    "videos": ("videos", "video"),
+    "desktop": ("desktop",), "downloads": ("downloads", "download"),
+    "documents": ("documents", "document"), "pictures": ("pictures", "photos"),
+    "music": ("music",), "videos": ("videos", "video"),
 }
+
+SITE_ALIASES = ("youtube", "github", "google", "chatgpt", "gmail", "google drive")
 
 
 def _find_alias(text: str, aliases: dict[str, tuple[str, ...]]) -> str | None:
@@ -44,11 +39,9 @@ def _find_alias(text: str, aliases: dict[str, tuple[str, ...]]) -> str | None:
 
 
 def detect_intent(text: str) -> Intent | None:
-    """Convert a spoken sentence into one small, explicit intent."""
     text = " ".join(text.lower().strip().split())
     if not text:
         return None
-
     if text in {"hello", "hi", "hey", "hello nova", "hi nova", "hey nova"}:
         return Intent("greeting")
     if "stop nova" in text:
@@ -61,30 +54,12 @@ def detect_intent(text: str) -> Intent | None:
         return Intent("capabilities")
     if any(p in text for p in ("are you there", "are you online", "are you working")):
         return Intent("status")
-
+    if any(p in text for p in ("what window is active", "what app is active", "which window am i on", "what am i using")):
+        return Intent("active_window")
     if any(p in text for p in ("take a screenshot", "take screenshot", "capture my screen", "screenshot")):
         return Intent("screenshot")
     if any(p in text for p in ("lock my computer", "lock the computer", "lock my pc")):
         return Intent("lock")
-
-    media = {
-        "next": ("next song", "next track", "skip song", "skip track"),
-        "previous": ("previous song", "previous track", "go back song"),
-        "play": ("play music", "resume music", "play media"),
-        "pause": ("pause music", "pause media"),
-    }
-    for action, phrases in media.items():
-        if any(p in text for p in phrases):
-            return Intent("media", action)
-
-    volume = {
-        "up": ("volume up", "increase volume", "turn volume up", "louder"),
-        "down": ("volume down", "decrease volume", "turn volume down", "quieter"),
-        "mute": ("mute volume", "mute computer", "unmute volume", "unmute computer"),
-    }
-    for action, phrases in volume.items():
-        if any(p in text for p in phrases):
-            return Intent("volume", action)
 
     for action, phrases in {
         "shutdown": ("shutdown computer", "shut down computer", "shutdown my computer", "shut down my computer"),
@@ -94,29 +69,27 @@ def detect_intent(text: str) -> Intent | None:
         if any(p in text for p in phrases):
             return Intent("power", action, requires_confirmation=True)
 
-    # Check the specific YouTube form before generic web search.
-    match = re.search(r"(?:search|find) youtube (?:for )?(.+)", text)
-    if match:
-        return Intent("youtube_search", match.group(1).strip())
-
     match = re.search(r"(?:search|google) (?:for )?(.+)", text)
     if match:
         return Intent("web_search", match.group(1).strip())
-
+    match = re.search(r"(?:search|find) youtube (?:for )?(.+)", text)
+    if match:
+        return Intent("youtube_search", match.group(1).strip())
     match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
     if match:
         return Intent("open_url", match.group(1))
-
     match = re.search(r"(?:create|make) (?:a )?folder(?: called| named)? (.+)", text)
     if match:
         return Intent("create_folder", match.group(1).strip())
 
+    for site in SITE_ALIASES:
+        if any(p in text for p in (f"open {site}", f"go to {site}", f"visit {site}")):
+            return Intent("open_site", site)
+
     app = _find_alias(text, APP_ALIASES)
     if app and any(p in text for p in ("open ", "launch ", "start ")):
         return Intent("open_app", app)
-
     folder = _find_alias(text, FOLDER_ALIASES)
     if folder and any(p in text for p in ("open ", "show ", "view ")):
         return Intent("open_folder", folder)
-
     return None

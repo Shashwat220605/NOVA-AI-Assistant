@@ -11,12 +11,13 @@ import pyttsx3
 from google import genai
 
 from desktop_automation import (
+    control_media,
+    control_volume,
     create_folder,
     lock_computer,
     open_application,
     open_folder,
     open_url,
-    power_action,
     take_screenshot,
     web_search,
 )
@@ -33,9 +34,6 @@ SPEECH_THRESHOLD = 300
 BACKEND_URL = "http://127.0.0.1:8000"
 
 
-# ============================================================
-# STATE
-# ============================================================
 def set_state(state):
     try:
         requests.post(f"{BACKEND_URL}/state/{state}", timeout=2)
@@ -43,19 +41,15 @@ def set_state(state):
         pass
 
 
-# ============================================================
-# DESKTOP COMMANDS
-# ============================================================
 def handle_desktop_command(text):
-    """Handle lightweight, explicitly supported Windows actions.
+    """Handle explicitly supported Windows actions.
 
-    No arbitrary shell commands are accepted. Heavy background services,
-    OCR, browser drivers, and continuous screen monitoring are intentionally
-    avoided so NOVA remains friendly to mid-range laptop hardware.
+    Commands run only after voice input. No arbitrary shell commands,
+    continuous screen monitoring, OCR, browser drivers, or background
+    automation services are used, keeping NOVA lightweight on mid-range PCs.
     """
     text = text.lower().strip()
 
-    # Apps
     app_patterns = {
         "chrome": ["open chrome", "launch chrome", "start chrome", "open google chrome"],
         "vs code": ["open vs code", "launch vs code", "open visual studio code", "open vscode"],
@@ -70,7 +64,6 @@ def handle_desktop_command(text):
         if any(phrase in text for phrase in phrases):
             return open_application(app)
 
-    # Folders
     folder_patterns = {
         "downloads": ["open downloads", "open my downloads", "show downloads"],
         "documents": ["open documents", "open my documents"],
@@ -83,13 +76,24 @@ def handle_desktop_command(text):
         if any(phrase in text for phrase in phrases):
             return open_folder(folder)
 
-    # Screenshot
-    if any(p in text for p in [
-        "take a screenshot", "take screenshot", "capture my screen", "screenshot"
-    ]):
+    if any(p in text for p in ["take a screenshot", "take screenshot", "capture my screen", "screenshot"]):
         return take_screenshot()
 
-    # Browser searches
+    # Media and volume are on-demand only, so they have negligible idle cost.
+    if any(p in text for p in ["play music", "resume music", "play media", "pause music", "pause media", "play pause"]):
+        action = "pause" if "pause" in text and "play" not in text else "play"
+        return control_media(action)
+    if any(p in text for p in ["next song", "next track", "skip song", "skip track"]):
+        return control_media("next")
+    if any(p in text for p in ["previous song", "previous track", "go back song"]):
+        return control_media("previous")
+    if any(p in text for p in ["volume up", "increase volume", "turn volume up", "louder"]):
+        return control_volume("up")
+    if any(p in text for p in ["volume down", "decrease volume", "turn volume down", "quieter"]):
+        return control_volume("down")
+    if any(p in text for p in ["mute volume", "mute computer", "unmute volume", "unmute computer"]):
+        return control_volume("mute")
+
     youtube_match = re.search(r"(?:search|find) youtube for (.+)", text)
     if youtube_match:
         return web_search(youtube_match.group(1), site="youtube")
@@ -98,22 +102,18 @@ def handle_desktop_command(text):
     if google_match:
         return web_search(google_match.group(1))
 
-    # URL opening
     url_match = re.search(r"(?:open|go to|visit)\s+((?:https?://)?(?:www\.)?[^\s]+\.[a-z]{2,}(?:/[^\s]*)?)", text)
     if url_match:
         return open_url(url_match.group(1))
 
-    # Create a safe folder inside Desktop/NOVA
     folder_match = re.search(r"(?:create|make) (?:a )?folder(?: called| named)? (.+)", text)
     if folder_match:
         return create_folder(folder_match.group(1))
 
-    # Lock
     if any(p in text for p in ["lock my computer", "lock the computer", "lock my pc"]):
         return lock_computer()
 
-    # Power actions are confirmation-gated. We intentionally don't trigger
-    # shutdown/restart/sleep from a single ambiguous phrase.
+    # Destructive power actions are intentionally not executed from voice alone.
     if any(p in text for p in ["shutdown computer", "shut down computer"]):
         return "Shutdown is available, but NOVA requires confirmation before doing that."
     if any(p in text for p in ["restart computer", "restart my computer"]):
@@ -124,9 +124,6 @@ def handle_desktop_command(text):
     return None
 
 
-# ============================================================
-# GENERAL LOCAL COMMANDS
-# ============================================================
 def handle_local_command(text):
     text = text.lower().strip()
 
@@ -134,7 +131,7 @@ def handle_local_command(text):
         return "My name is NOVA. I am your personal AI assistant."
 
     if any(p in text for p in ["what can you do", "what are your capabilities", "what do you do"]):
-        return "I can answer questions, control supported computer tasks, open apps and folders, take screenshots, search the web, and control my visual interface."
+        return "I can answer questions, control supported computer tasks, open apps and folders, take screenshots, control media and volume, search the web, and control my visual interface."
 
     if text in {"hello", "hi", "hey", "hello nova", "hi nova", "hey nova"}:
         return "Hello. How can I help you?"
@@ -148,9 +145,6 @@ def handle_local_command(text):
     return None
 
 
-# ============================================================
-# GEMINI
-# ============================================================
 print("Connecting to Gemini...")
 client = genai.Client()
 chat = client.chats.create(
@@ -170,10 +164,6 @@ You are a desktop AI assistant.
     },
 )
 
-
-# ============================================================
-# VOICE SERVICES
-# ============================================================
 print("Initializing voice system...")
 tts = pyttsx3.init()
 tts.setProperty("rate", 175)
@@ -193,10 +183,6 @@ print("========================================\n")
 
 set_state("idle")
 
-
-# ============================================================
-# MAIN LOOP
-# ============================================================
 while True:
     set_state("listening")
     print("\n🎤 Listening...")
@@ -268,8 +254,8 @@ while True:
         set_state("idle")
         break
 
-    # Local responses are checked first so simple commands don't consume
-    # Gemini requests or extra CPU/network resources.
+    # Local/desktop actions run before Gemini. This avoids network requests
+    # and extra model work for simple computer commands.
     ai_response = handle_local_command(user_text)
     if ai_response is None:
         ai_response = handle_desktop_command(user_text)
